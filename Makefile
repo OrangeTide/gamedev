@@ -8,8 +8,18 @@ RMF   := rm -rf
 MKDIR := mkdir -p
 RMDIR := rmdir
 CMAKE := cmake
+
+# detect host build system
+ifneq ($(MINGW_CHOST),)
+CMAKE_OPTS := -G "MinGW Makefiles"
+else
+CMAKE_OPTS := -G "Unix Makefiles"
+endif
+
 # Emscripten - EXPERIMENTAL
-# CMAKE := emcmake cmake
+ifneq ($(EMSCRIPTEN),)
+CMAKE := emcmake cmake
+endif
 
 .PHONY: all clean distclean
 
@@ -18,7 +28,7 @@ all: ./build/Makefile
 
 ./build/Makefile:
 	@  ($(MKDIR) build > /dev/null)
-	@  (cd build > /dev/null 2>&1 && $(CMAKE) .. -DCMAKE_VERBOSE_MAKEFILE=TRUE)
+	@  (cd build > /dev/null 2>&1 && $(CMAKE) $(CMAKE_OPTS) -DCMAKE_VERBOSE_MAKEFILE=TRUE .. )
 
 clean: ./build/Makefile
 	@- $(MAKE) -C build clean || true
@@ -26,7 +36,7 @@ clean: ./build/Makefile
 distclean:
 	@  echo Removing build/
 	@  ($(MKDIR) build > /dev/null)
-	@  (cd build > /dev/null 2>&1 && $(CMAKE) .. > /dev/null 2>&1)
+	@  (cd build > /dev/null 2>&1 && $(CMAKE) $(CMAKE_OPTS) .. > /dev/null 2>&1)
 	@- $(MAKE) --silent -C build clean || true
 	@- $(RM) ./build/Makefile
 	@- $(RMF) ./build/CMake*
