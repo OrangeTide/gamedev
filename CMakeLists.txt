@@ -14,7 +14,9 @@ SET( CMAKE_AR "gcc-ar" )
 SET( CMAKE_C_ARCHIVE_CREATE "<CMAKE_AR> qcs <TARGET> <LINK_FLAGS> <OBJECTS>"  )
 SET( CMAKE_C_ARCHIVE_FINISH true )
 
+if (NOT EMSCRIPTEN)
 set( THREADS_PREFER_PTHREAD_FLAG ON )
 find_package( Threads REQUIRED )
+endif()
 
 add_subdirectory( src )

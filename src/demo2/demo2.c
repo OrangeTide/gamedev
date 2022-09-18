@@ -6,8 +6,9 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
 
-#include "cube-sapp.glsl.h"
+#include "palette.glsl.h"
 
 /***********************************************************************
  * Prototypes
@@ -17,6 +18,16 @@ static void game_tick(void);
 static void gfx_init(void);
 static void gfx_done(void);
 static void gfx_draw(void);
+
+static void palette_init(uint32_t palette[]);
+
+void screen_init(int width, int height);
+void screen_done(void);
+void screen_fill(uint8_t v);
+void screen_random(void);
+void screen_update(void);
+uint8_t *screen_pixels(unsigned *width, unsigned *height, unsigned *rowbytes);
+void screen_pattern_herringbone(void);
 
 /***********************************************************************
  * State
@@ -71,6 +82,12 @@ struct state {
 		int index_count; /* for drawing */
 	} gfx;
 
+	struct screen {
+		unsigned width;
+		unsigned height;
+		sg_range pixels;
+		uint32_t palette[256];
+	} screen;
 };
 
 static struct state state = {
@@ -121,7 +138,10 @@ timer_now(unsigned t)
 static void
 init(void)
 {
+	screen_init(160, 100);
+	palette_init(state.screen.palette);
 	gfx_init();
+	// screen_update();
 }
 
 static void
@@ -189,7 +209,7 @@ sokol_main(int argc, char* argv[])
 	(void)argv;
 
 	sapp_desc desc = {
-		.window_title = "demo1",
+		.window_title = "demo2",
 		.init_cb = init,
 		.cleanup_cb = done,
 		.frame_cb = frame_update,
@@ -197,9 +217,6 @@ sokol_main(int argc, char* argv[])
 		.width = 640,
 		.height = 480,
 		.icon.sokol_default = true,
-#if defined __EMSCRIPTEN__
-		.html5_canvas_name = "canvas",
-#endif
 	};
 
 	return desc;
@@ -235,86 +252,57 @@ gfx_init(void)
 	};
 	sg_setup(&desc);
 
-	float vertices[] = {
-		// positions            // colors
-		-1.0, -1.0, -1.0,	1.0, 0.0, 0.0, 1.0,
-		 1.0, -1.0, -1.0,	1.0, 0.0, 0.0, 1.0,
-		 1.0,  1.0, -1.0,	1.0, 0.0, 0.0, 1.0,
-		-1.0,  1.0, -1.0,	1.0, 0.0, 0.0, 1.0,
-
-		-1.0, -1.0,  1.0,	0.0, 1.0, 0.0, 1.0,
-		 1.0, -1.0,  1.0,	0.0, 1.0, 0.0, 1.0,
-		 1.0,  1.0,  1.0,	0.0, 1.0, 0.0, 1.0,
-		-1.0,  1.0,  1.0,	0.0, 1.0, 0.0, 1.0,
-
-		-1.0, -1.0, -1.0,	0.0, 0.0, 1.0, 1.0,
-		-1.0,  1.0, -1.0,	0.0, 0.0, 1.0, 1.0,
-		-1.0,  1.0,  1.0,	0.0, 0.0, 1.0, 1.0,
-		-1.0, -1.0,  1.0,	0.0, 0.0, 1.0, 1.0,
-
-		 1.0, -1.0, -1.0,	1.0, 0.5, 0.0, 1.0,
-		 1.0,  1.0, -1.0,	1.0, 0.5, 0.0, 1.0,
-		 1.0,  1.0,  1.0,	1.0, 0.5, 0.0, 1.0,
-		 1.0, -1.0,  1.0,	1.0, 0.5, 0.0, 1.0,
-
-		-1.0, -1.0, -1.0,	0.0, 0.5, 1.0, 1.0,
-		-1.0, -1.0,  1.0,	0.0, 0.5, 1.0, 1.0,
-		 1.0, -1.0,  1.0,	0.0, 0.5, 1.0, 1.0,
-		 1.0, -1.0, -1.0,	0.0, 0.5, 1.0, 1.0,
-
-		-1.0,  1.0, -1.0,	1.0, 0.0, 0.5, 1.0,
-		-1.0,  1.0,  1.0,	1.0, 0.0, 0.5, 1.0,
-		 1.0,  1.0,  1.0,	1.0, 0.0, 0.5, 1.0,
-		 1.0,  1.0, -1.0,	1.0, 0.0, 0.5, 1.0,
+	float quad_data[] = {
+		-1.0,  1.0,  1.0,
+		 1.0,  1.0,  1.0,
+		-1.0, -1.0,  1.0,
+		 1.0, -1.0,  1.0,
 	};
 
-	sg_buffer_desc vbuffer = {
-		.data = SG_RANGE(vertices),
+	sg_buffer_desc quad_vbuffer = {
+		.data = SG_RANGE(quad_data),
 		.type = SG_BUFFERTYPE_VERTEXBUFFER,
 		.usage = SG_USAGE_IMMUTABLE,
-		.label = "cube-vertices",
+		.label = "quad-vertices",
 	};
-	state.gfx.bind.vertex_buffers[0] = sg_make_buffer(&vbuffer);
-	state.gfx.vertex_count = sizeof(vertices) / sizeof(*vertices) / (3 + 4);
-	// printf("vertex count = %d\n", state.gfx.vertex_count);
+	state.gfx.bind.vertex_buffers[0] = sg_make_buffer(&quad_vbuffer);
+	state.gfx.vertex_count = sizeof(quad_data) / sizeof(*quad_data) / (3);
 
-	uint16_t indices[] = {
-		0, 1, 2,  0, 2, 3,
-		6, 5, 4,  7, 6, 4,
-		8, 9, 10,  8, 10, 11,
-		14, 13, 12,  15, 14, 12,
-		16, 17, 18,  16, 18, 19,
-		22, 21, 20,  23, 22, 20
+	sg_image_desc screen_img = {
+		.width = state.screen.width,
+		.height = state.screen.height,
+		.pixel_format = SG_PIXELFORMAT_R8,
+		.usage = SG_USAGE_STREAM,
+		.min_filter = SG_FILTER_LINEAR,
+		.mag_filter = SG_FILTER_NEAREST,
+		.wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+		.wrap_v = SG_WRAP_CLAMP_TO_EDGE,
+		.label = "screen-texture",
 	};
+	sg_image img = sg_make_image(&screen_img);
+	state.gfx.bind.fs_images[SLOT_demo2_screentexture] = img;
 
-	sg_buffer_desc ibuffer = {
-		.type = SG_BUFFERTYPE_INDEXBUFFER,
-		.data = SG_RANGE(indices),
-		.usage = SG_USAGE_IMMUTABLE,
-		.label = "cube-indices"
+	sg_image_desc palette_desc = {
+		.width = 256,
+		.height = 1,
+		.data.subimage[0][0] = SG_RANGE(state.screen.palette),
+		.label = "palette-tex",
 	};
-	sg_buffer ibuf = sg_make_buffer(&ibuffer);
-	state.gfx.bind.index_buffer = ibuf;
-	state.gfx.index_count = sizeof(indices) / sizeof(*indices);
-	// printf("index count = %d\n", state.gfx.index_count);
+	sg_image palette = sg_make_image(&palette_desc);
+	state.gfx.bind.fs_images[SLOT_demo2_palette] = palette;
 
-	sg_shader shd = sg_make_shader(demo1_cube_shader_desc(sg_query_backend()));
+	sg_shader shd = sg_make_shader(demo2_palette_shader_desc(sg_query_backend()));
 
 	sg_pipeline_desc pipeline_desc = {
 		.shader = shd,
 		.layout = {
 			.attrs = {
-				[ATTR_demo1_vs_position].format = SG_VERTEXFORMAT_FLOAT3,
-				[ATTR_demo1_vs_color0].format = SG_VERTEXFORMAT_FLOAT4
+				[ATTR_demo2_vs_position].format = SG_VERTEXFORMAT_FLOAT3,
 			}
 		},
-		.index_type = SG_INDEXTYPE_UINT16,
 		.cull_mode = SG_CULLMODE_BACK,
-		.depth = {
-			.write_enabled = true,
-			.compare = SG_COMPAREFUNC_LESS_EQUAL,
-		},
-		.label = "cube-pipeline",
+		.primitive_type = SG_PRIMITIVETYPE_TRIANGLE_STRIP,
+		.label = "quad-pipeline",
 	};
 
 	state.gfx.pip = sg_make_pipeline(&pipeline_desc);
@@ -329,12 +317,14 @@ gfx_done(void)
 static void
 gfx_draw(void)
 {
-	demo1_vs_params_t vs_params;
 	const int canvas_width = sapp_width();
 	const int canvas_height = sapp_height();
 
+#if 0
+	demo2_vs_params_t vs_params;
 	hmm_mat4 proj = HMM_Perspective(60.0f, canvas_width / (float)canvas_height, 0.01f, 10.0f);
 	hmm_mat4 view = HMM_LookAt(HMM_Vec3(0.0f, 1.5f, 6.0f), HMM_Vec3(0.0f, 0.0f, 0.0f), HMM_Vec3(0.0f, 1.0f, 0.0f));
+	demo2_vs_params_t vs_params;
 	hmm_mat4 view_proj = HMM_MultiplyMat4(proj, view);
 
 	// hmm_mat4 model = HMM_Mat4d(1.0f);
@@ -343,12 +333,171 @@ gfx_draw(void)
 	hmm_mat4 model = HMM_MultiplyMat4(rxm, rym);
 
 	vs_params.mvp = HMM_MultiplyMat4(view_proj, model);
+#endif
+
+	screen_pattern_herringbone();
+	screen_update();
 
 	sg_begin_default_pass(&state.gfx.pass_action, canvas_width, canvas_height);
 	sg_apply_pipeline(state.gfx.pip);
 	sg_apply_bindings(&state.gfx.bind);
-	sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_demo1_vs_params, &SG_RANGE(vs_params));
-	sg_draw(0, state.gfx.index_count, 1);
+	// sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_demo2_vs_params, &SG_RANGE(vs_params));
+	sg_draw(0, state.gfx.vertex_count, 1);
 	sg_end_pass();
 	sg_commit();
+}
+
+/***********************************************************************
+ * Palette
+ ***********************************************************************/
+
+/* initialize 256 color palette */
+static void
+palette_init(uint32_t palette[])
+{
+	unsigned i;
+	unsigned char r, g, b;
+	uint32_t c;
+
+
+	/* traditional TTL RGB : colors 0~15 */
+	i = 0;
+	palette[i++] = 0x000000; // 0 - black
+	palette[i++] = 0x800000; // 1 - red
+	palette[i++] = 0x008000; // 2 - green
+	palette[i++] = 0x808000; // 3 - brown
+	palette[i++] = 0x000080; // 4 - blue
+	palette[i++] = 0x800080; // 5 - magenta
+	palette[i++] = 0x008080; // 6 - cyan
+	palette[i++] = 0xc0c0c0; // 7 - white
+	/* high-intensity (bright mode) */
+	palette[i++] = 0x808080; // 8 - dark grey
+	palette[i++] = 0xff0000; // 9 - bright red
+	palette[i++] = 0x00ff00; // 10 - bright green
+	palette[i++] = 0xffff00; // 11 - yellow
+	palette[i++] = 0x0000ff; // 12 - bright blue
+	palette[i++] = 0xff00ff; // 13 - bright magenta
+	palette[i++] = 0x00ffff; // 14 - bright cyan
+	palette[i++] = 0xffffff; // 15 - bright white
+
+	/* RGB 6x6x6 color cube : colors 16~231 */
+	for (; i < 232; i++) {
+		unsigned n = i - 16;
+
+		b = n % 6;
+		g = n / 6 % 6;
+		r = n / 36 % 6;
+
+		c = r * 255 / 5;
+		c <<= 8;
+		c |= g * 255 / 5;
+		c <<= 8;
+		c |= b * 255 / 5;
+
+		palette[i] = c;
+	}
+
+	/* grey scale : colors 232~255 */
+	for (; i < 256; i++) {
+		unsigned n = i - 232;
+		/* 08, 12, 1c, 26, ... d0, da, e4, ee */
+		c = 8 + n * 230 / 23;
+		palette[i] = c | (c << 8) | (c << 16);
+	}
+}
+
+/***********************************************************************
+ * Screen
+ ***********************************************************************/
+
+void
+screen_init(int width, int height)
+{
+	state.screen.width = width;
+	state.screen.height = height;
+	state.screen.pixels.size = width * height;
+	state.screen.pixels.ptr = malloc(state.screen.pixels.size);
+	if (!state.screen.pixels.ptr) {
+		// SOKOL_LOG("alloc failed");
+		abort(); // SOKOL_ABORT();
+	}
+	screen_fill(0);
+}
+
+void
+screen_done(void)
+{
+	if (state.screen.pixels.ptr) {
+		free((uint8_t*)state.screen.pixels.ptr);
+		state.screen.pixels.ptr = NULL;
+		state.screen.pixels.size = 0;
+	}
+}
+
+void
+screen_fill(uint8_t v)
+{
+	if (state.screen.pixels.ptr) {
+		memset((uint8_t*)state.screen.pixels.ptr, v, state.screen.width * state.screen.height);
+	}
+}
+
+void
+screen_random(void)
+{
+	if (state.screen.pixels.ptr) {
+		uint8_t *pixels = (uint8_t*)state.screen.pixels.ptr;
+		unsigned x, y;
+		for (y = 0; y < state.screen.height; y++) {
+			uint8_t *row = pixels + y * state.screen.width;
+			for (x = 0; x < state.screen.width; x++) {
+				row[x] = rand() % 256;
+			}
+		}
+	}
+}
+
+void
+screen_update(void)
+{
+	sg_image_data data = { .subimage[0][0] = state.screen.pixels };
+	sg_update_image(state.gfx.bind.fs_images[SLOT_demo2_screentexture], &data);
+}
+
+uint8_t *
+screen_pixels(unsigned *width, unsigned *height, unsigned *rowbytes)
+{
+	if (!state.screen.pixels.ptr) {
+		if (width)
+			*width = 0;
+		if (height)
+			*height = 0;
+		if (rowbytes)
+			*rowbytes = 0;
+		return NULL;
+	}
+
+	if (width)
+		*width = state.screen.width;
+	if (height)
+		*height = state.screen.height;
+	if (rowbytes)
+		*rowbytes = state.screen.width;
+
+	return state.screen.pixels.ptr;
+}
+
+/* a simple animated pattern - digital herringbone */
+void
+screen_pattern_herringbone(void)
+{
+	unsigned width, height;
+	unsigned char *pixels = screen_pixels(&width, &height, NULL);
+	unsigned x, y;
+	unsigned char *row = pixels;
+	for (y = 0; y < height; y++, row += width) {
+		for (x = 0; x < width; x++) {
+			row[x] = ((x + (y^12) + state.timing.tick / 30) % 16) + 232;
+		}
+	}
 }

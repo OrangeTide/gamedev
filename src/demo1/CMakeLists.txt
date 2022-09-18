@@ -17,3 +17,12 @@ target_link_libraries( demo1
 target_include_directories( demo1
 	PUBLIC .
 	)
+
+if (EMSCRIPTEN)
+add_custom_command(
+	TARGET demo1 POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E copy
+		${CMAKE_CURRENT_SOURCE_DIR}/demo1.html
+		${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/demo1.html
+	)
+endif()

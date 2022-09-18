@@ -7,6 +7,9 @@ RM    := rm -f
 RMF   := rm -rf
 MKDIR := mkdir -p
 RMDIR := rmdir
+CMAKE := cmake
+# Emscripten - EXPERIMENTAL
+# CMAKE := emcmake cmake
 
 .PHONY: all clean distclean
 
@@ -15,7 +18,7 @@ all: ./build/Makefile
 
 ./build/Makefile:
 	@  ($(MKDIR) build > /dev/null)
-	@  (cd build > /dev/null 2>&1 && cmake .. -DCMAKE_VERBOSE_MAKEFILE=TRUE)
+	@  (cd build > /dev/null 2>&1 && $(CMAKE) .. -DCMAKE_VERBOSE_MAKEFILE=TRUE)
 
 clean: ./build/Makefile
 	@- $(MAKE) -C build clean || true
@@ -23,7 +26,7 @@ clean: ./build/Makefile
 distclean:
 	@  echo Removing build/
 	@  ($(MKDIR) build > /dev/null)
-	@  (cd build > /dev/null 2>&1 && cmake .. > /dev/null 2>&1)
+	@  (cd build > /dev/null 2>&1 && $(CMAKE) .. > /dev/null 2>&1)
 	@- $(MAKE) --silent -C build clean || true
 	@- $(RM) ./build/Makefile
 	@- $(RMF) ./build/CMake*
@@ -35,6 +38,10 @@ distclean:
 	@  $(RMDIR) ./build
 
 ifeq ($(findstring distclean,$(MAKECMDGOALS)),)
-	$(MAKECMDGOALS): ./build/Makefile
+$(MAKECMDGOALS): ./build/Makefile
 	@ $(MAKE) -C build $(MAKECMDGOALS)
 endif
+
+server: all
+	@ echo Connect to http://localhost:8080/demo1.html
+	@ cd bin ; python3 -m http.server 8080 --bind 127.0.0.1
