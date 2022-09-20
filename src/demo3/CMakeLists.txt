@@ -1,4 +1,11 @@
-add_executable( demo3 demo3.c )
+add_executable( demo3
+	demo3.c
+	input.c
+	graphics.c
+	gui.c
+	screen.c
+	timer.c
+	)
 
 target_compile_options( demo3
 	PRIVATE -Wall -W -O2
