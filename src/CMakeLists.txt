@@ -1,4 +1,6 @@
 include_directories( include )
 add_subdirectory( sokol )
+add_subdirectory( imgui )
 add_subdirectory( demo1 )
 add_subdirectory( demo2 )
+add_subdirectory( demo3 )

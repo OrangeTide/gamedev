@@ -1,4 +1,4 @@
-project( game C )
+project( game LANGUAGES C CXX )
 cmake_minimum_required( VERSION 3.7 )
 
 if ( ${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR} )

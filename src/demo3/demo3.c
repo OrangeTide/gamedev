@@ -1,8 +1,12 @@
-#include "sokol_app.h"
-#include "sokol_gfx.h"
-#include "sokol_audio.h"
-#include "sokol_glue.h"
+#define CIMGUI_DEFINE_ENUMS_AND_STRUCTS
+#include <cimgui/cimgui.h>
+#include <sokol_app.h>
+#include <sokol_gfx.h>
+#include <sokol_audio.h>
+#include <sokol_glue.h>
+#include <sokol_imgui.h>
 #include "HandmadeMath.h"
+
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -18,6 +22,11 @@ static void game_tick(void);
 static void gfx_init(void);
 static void gfx_done(void);
 static void gfx_draw(void);
+
+static void gui_init(void);
+static void gui_done(void);
+static void gui_frame(void);
+static bool gui_event(const sapp_event *e);
 
 static void palette_init(uint32_t palette[]);
 
@@ -88,6 +97,11 @@ struct state {
 		sg_range pixels;
 		uint32_t palette[256];
 	} screen;
+
+	struct gui {
+		bool show_another_window;
+		sg_pass_action pass_gui;
+	} gui;
 };
 
 static struct state state = {
@@ -109,6 +123,12 @@ static struct state state = {
 		.colors[0] = {
 			.action = SG_ACTION_CLEAR,
 			.value = { 0.25f, 0.25f, 0.50f, 1.0f }
+		}
+	},
+	.gui.pass_gui = (sg_pass_action) {
+		.colors[0] = {
+			.action = SG_ACTION_DONTCARE,
+			.value = {0.2f, 0.3f, 0.3f, 1.0f },
 		}
 	},
 };
@@ -141,12 +161,14 @@ init(void)
 	screen_init(160, 100);
 	palette_init(state.screen.palette);
 	gfx_init();
+	gui_init();
 	// screen_update();
 }
 
 static void
 done(void)
 {
+	gui_done();
 	gfx_done();
 }
 
@@ -175,11 +197,15 @@ frame_update(void)
 	}
 
 	gfx_draw();
+	gui_frame();
 }
 
 static void
 input(const sapp_event *ev)
 {
+	if (gui_event(ev)) {
+		return;
+	}
 	if (!state.input.enabled)
 		return;
 	switch (ev->type) {
@@ -345,6 +371,66 @@ gfx_draw(void)
 	sg_draw(0, state.gfx.vertex_count, 1);
 	sg_end_pass();
 	sg_commit();
+}
+
+/***********************************************************************
+ * GUI
+ ***********************************************************************/
+
+static void
+gui_init(void)
+{
+	simgui_desc_t gui_desc = { 0 };
+	simgui_setup(&gui_desc);
+}
+
+static void
+gui_done(void)
+{
+	simgui_shutdown();
+}
+
+static void
+gui_frame(void)
+{
+	const int canvas_width = sapp_width();
+	const int canvas_height = sapp_height();
+	simgui_frame_desc_t frame_desc = {
+		.width = canvas_width,
+		.height = canvas_height,
+		.delta_time = sapp_frame_duration(),
+		.dpi_scale = sapp_dpi_scale(),
+	};
+
+	simgui_new_frame(&frame_desc);
+
+	static float f = 0.0f;
+	igText("Hello GUI");
+	igSliderFloat("float", &f, 0.0f, 1.0f, "%.3f", ImGuiScrollFlags_None);
+	igColorEdit3("clear color", (float*)&state.gfx.pass_action.colors[0].value, 0);
+
+	if (igButton("another Window", (ImVec2) { 0.0f, 0.0f })) {
+		        state.gui.show_another_window ^= 1;
+	}
+
+	igText("application average %.3f ms/frame (%.1f FPS)", 1000.0f / igGetIO()->Framerate, igGetIO()->Framerate);
+
+	if (state.gui.show_another_window) {
+		igSetNextWindowSize((ImVec2){100, 100}, ImGuiCond_FirstUseEver);
+		igBegin("Another Window", &state.gui.show_another_window, 0);
+		igText("Okay");
+		igEnd();
+	}
+
+	sg_begin_default_pass(&state.gui.pass_gui, canvas_width, canvas_height);
+	simgui_render();
+	sg_end_pass();
+}
+
+static bool
+gui_event(const sapp_event *e)
+{
+	return simgui_handle_event(e);
 }
 
 /***********************************************************************
