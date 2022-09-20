@@ -5,7 +5,6 @@
 #include <sokol_audio.h>
 #include <sokol_glue.h>
 #include <sokol_imgui.h>
-#include "HandmadeMath.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -235,7 +234,7 @@ sokol_main(int argc, char* argv[])
 	(void)argv;
 
 	sapp_desc desc = {
-		.window_title = "demo2",
+		.window_title = "demo3",
 		.init_cb = init,
 		.cleanup_cb = done,
 		.frame_cb = frame_update,
@@ -306,7 +305,7 @@ gfx_init(void)
 		.label = "screen-texture",
 	};
 	sg_image img = sg_make_image(&screen_img);
-	state.gfx.bind.fs_images[SLOT_demo2_screentexture] = img;
+	state.gfx.bind.fs_images[SLOT_demo3_screentexture] = img;
 
 	sg_image_desc palette_desc = {
 		.width = 256,
@@ -315,15 +314,15 @@ gfx_init(void)
 		.label = "palette-tex",
 	};
 	sg_image palette = sg_make_image(&palette_desc);
-	state.gfx.bind.fs_images[SLOT_demo2_palette] = palette;
+	state.gfx.bind.fs_images[SLOT_demo3_palette] = palette;
 
-	sg_shader shd = sg_make_shader(demo2_palette_shader_desc(sg_query_backend()));
+	sg_shader shd = sg_make_shader(demo3_palette_shader_desc(sg_query_backend()));
 
 	sg_pipeline_desc pipeline_desc = {
 		.shader = shd,
 		.layout = {
 			.attrs = {
-				[ATTR_demo2_vs_position].format = SG_VERTEXFORMAT_FLOAT3,
+				[ATTR_demo3_vs_position].format = SG_VERTEXFORMAT_FLOAT3,
 			}
 		},
 		.cull_mode = SG_CULLMODE_BACK,
@@ -346,28 +345,13 @@ gfx_draw(void)
 	const int canvas_width = sapp_width();
 	const int canvas_height = sapp_height();
 
-#if 0
-	demo2_vs_params_t vs_params;
-	hmm_mat4 proj = HMM_Perspective(60.0f, canvas_width / (float)canvas_height, 0.01f, 10.0f);
-	hmm_mat4 view = HMM_LookAt(HMM_Vec3(0.0f, 1.5f, 6.0f), HMM_Vec3(0.0f, 0.0f, 0.0f), HMM_Vec3(0.0f, 1.0f, 0.0f));
-	demo2_vs_params_t vs_params;
-	hmm_mat4 view_proj = HMM_MultiplyMat4(proj, view);
-
-	// hmm_mat4 model = HMM_Mat4d(1.0f);
-	hmm_mat4 rxm = HMM_Rotate(state.game.rx, HMM_Vec3(1.0f, 0.0f, 0.0f));
-	hmm_mat4 rym = HMM_Rotate(state.game.ry, HMM_Vec3(0.0f, 1.0f, 0.0f));
-	hmm_mat4 model = HMM_MultiplyMat4(rxm, rym);
-
-	vs_params.mvp = HMM_MultiplyMat4(view_proj, model);
-#endif
-
 	screen_pattern_herringbone();
 	screen_update();
 
 	sg_begin_default_pass(&state.gfx.pass_action, canvas_width, canvas_height);
 	sg_apply_pipeline(state.gfx.pip);
 	sg_apply_bindings(&state.gfx.bind);
-	// sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_demo2_vs_params, &SG_RANGE(vs_params));
+	// sg_apply_uniforms(SG_SHADERSTAGE_VS, SLOT_demo3_vs_params, &SG_RANGE(vs_params));
 	sg_draw(0, state.gfx.vertex_count, 1);
 	sg_end_pass();
 	sg_commit();
@@ -547,7 +531,7 @@ void
 screen_update(void)
 {
 	sg_image_data data = { .subimage[0][0] = state.screen.pixels };
-	sg_update_image(state.gfx.bind.fs_images[SLOT_demo2_screentexture], &data);
+	sg_update_image(state.gfx.bind.fs_images[SLOT_demo3_screentexture], &data);
 }
 
 uint8_t *
