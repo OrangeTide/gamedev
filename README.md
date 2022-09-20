@@ -15,6 +15,14 @@ Uses [Sokol](https://github.com/floooh/sokol) to implement some prototype games.
 * cmake 2.8 or newer
 * GNU Make (optional)
 
+#### Ubuntu 22.04
+
+```sh
+sudo apt-get install -y build-essential git cmake
+sudo apt-get install -y libx11-dev libxext-dev libxfixes-dev libxi-dev \
+    libxcursor-dev libgl1-mesa-dev libglfw3-dev libasound2-dev
+```
+
 ### Building
 
 * Run `make`
