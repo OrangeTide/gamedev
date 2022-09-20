@@ -31,7 +31,7 @@ sudo apt-get install -y libx11-dev libxext-dev libxfixes-dev libxi-dev \
 
 * Run `bin/demo3` or any of the other studies in bin.
 
-![demo3 screenshot](doc/Screenshot_2022-09-19_21-43-40.png)
+![demo3 screenshot](doc/Screenshot_2022-09-19_23-13-25.png)
 
 ## Help
 
