@@ -1,0 +1,51 @@
+# This is a basic workflow to help you get started with Actions
+
+name: CI
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but only for the master branch
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  EM_VERSION: 2.0.0
+  EM_CACHE_FOLDER: 'emsdk-cache'
+  ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+
+  ci_ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build Ubuntu
+        run: make
+
+  ci_windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build Windows
+        run: make
+
+  ci_emscripten:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup cache
+        id: cache-system-libraries
+        uses: actions/cache@v2
+        with:
+          path: ${{env.EM_CACHE_FOLDER}}
+          key: ${{env.EM_VERSION}}-${{ runner.os }}
+      - name: Setup emsdk
+        uses: mymindstorm/setup-emsdk@v6
+        with:
+          version: ${{env.EM_VERSION}}
+          actions-cache-folder: ${{env.EM_CACHE_FOLDER}}
+      - name: Build Emscripten/WASM
+        run: make EMSCRIPTEN=1

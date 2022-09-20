@@ -1,4 +1,4 @@
-# Game Dev experiments
+# Game Dev experiments [![CI](https://github.com/OrangeTide/gamedev/workflows/CI/badge.svg)](https://github.com/OrangeTide/gamedev/actions)
 
 Collection of my studies in game development.
 
