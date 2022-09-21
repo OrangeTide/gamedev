@@ -7,3 +7,7 @@ curl -O https://raw.githubusercontent.com/floooh/sokol/master/sokol_app.h \
 	-O https://raw.githubusercontent.com/floooh/sokol/master/sokol_glue.h \
 	-O https://raw.githubusercontent.com/floooh/sokol/master/sokol_gfx.h \
 	-O https://raw.githubusercontent.com/floooh/sokol/master/util/sokol_imgui.h
+
+# Apply patches
+patch -p1 < 0001-gamepad-API.patch
+patch -p1 < 0002-sokol_app-changes-for-android-support.patch
