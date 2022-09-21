@@ -239,7 +239,7 @@ typedef struct sgamepad {
 #endif
 } sgamepad;
 
-_SOKOL_PRIVATE sgamepad _sgamepad = {0};
+_SOKOL_PRIVATE sgamepad _sgamepad;
 
 /*== Windows Implementation ============================================*/
 #if defined (_WIN32)
