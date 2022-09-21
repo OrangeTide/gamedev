@@ -38,6 +38,11 @@ gui_frame(void)
 	igSliderFloat("float", &f, 0.0f, 1.0f, "%.3f", ImGuiScrollFlags_None);
 	igColorEdit3("clear color", (float*)&state.gfx.pass_action.colors[0].value, 0);
 
+	igRadioButton_Bool("Up", state.input.action_down[INPUT_ACTION_UP]);
+	igRadioButton_Bool("Down", state.input.action_down[INPUT_ACTION_DOWN]);
+	igRadioButton_Bool("Left", state.input.action_down[INPUT_ACTION_LEFT]);
+	igRadioButton_Bool("Right", state.input.action_down[INPUT_ACTION_RIGHT]);
+
 	if (igButton("another Window", (ImVec2) { 0.0f, 0.0f })) {
 		        state.gui.show_another_window ^= 1;
 	}

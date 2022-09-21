@@ -1,5 +1,6 @@
 /* demo3.c */
 #include <sokol_app.h>
+#include <sokol_gamepad.h>
 // #include <sokol_audio.h>
 
 #include <string.h>
@@ -57,6 +58,7 @@ struct state state = {
 static void
 init(void)
 {
+	sgamepad_init();
 	screen_init(160, 100);
 	palette_init(state.screen.palette);
 	gfx_init();
@@ -79,6 +81,8 @@ frame_update(void)
 	if (frame_time_ns > 33333333) {
 		frame_time_ns = 33333333;
 	}
+
+	input_gamepad();
 
 	state.timing.accumulator += frame_time_ns;
 	while(state.timing.accumulator > -TICK_TOLERANCE_NS) {
@@ -110,7 +114,7 @@ sokol_main(int argc, char* argv[])
 		.init_cb = init,
 		.cleanup_cb = done,
 		.frame_cb = frame_update,
-		.event_cb = input,
+		.event_cb = input_event,
 		.width = 640,
 		.height = 480,
 		.icon.sokol_default = true,
