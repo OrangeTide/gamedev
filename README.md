@@ -27,7 +27,7 @@ sudo apt-get install -y libx11-dev libxext-dev libxfixes-dev libxi-dev \
 
 * Run `make`
 
-### Executing program
+### Executing the Program
 
 * Run `bin/demo3` or any of the other studies in bin.
 
