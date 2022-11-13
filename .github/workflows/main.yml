@@ -11,7 +11,7 @@ on:
     branches: [ main ]
 
 env:
-  EM_VERSION: 2.0.0
+  EM_VERSION: 1.39.18
   EM_CACHE_FOLDER: 'emsdk-cache'
   ACTIONS_ALLOW_UNSECURE_COMMANDS: 'true'
 
@@ -23,31 +23,46 @@ jobs:
     steps:
       - name: Install required packages
         run: sudo apt-get -y install cmake libx11-dev libxext-dev libxfixes-dev libxi-dev libxcursor-dev libgl1-mesa-dev libglfw3-dev libasound2-dev
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Build Ubuntu
         run: make
 
   ci_windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Build Windows
         run: make
 
   ci_emscripten:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Setup cache
         id: cache-system-libraries
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ${{env.EM_CACHE_FOLDER}}
           key: ${{env.EM_VERSION}}-${{ runner.os }}
       - name: Setup emsdk
-        uses: mymindstorm/setup-emsdk@v6
+        uses: mymindstorm/setup-emsdk@v11
         with:
-          version: ${{env.EM_VERSION}}
-          actions-cache-folder: ${{env.EM_CACHE_FOLDER}}
+          version: $${env.EM_VERSION}}
+          actions-cache-folder: $${env.EM_CACHE_FOLDER}}
+      - name: Verify
+        run: emcc -v
       - name: Build Emscripten/WASM
         run: make EMSCRIPTEN=1
+
+  ci_android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: sparkfabrik/android-build-action@v1.0.0
+        with:
+          gradle-task: assembleDebug
+          project-path: android
+          output-path: app/build/outputs/apk/debug/app-debug.apk
+          browserstack-upload: false
+          browserstack-username: ${{ secrets.BROWSERSTACK_USERNAME }}
+          browserstack-access-key: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
