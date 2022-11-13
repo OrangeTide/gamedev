@@ -1,3 +1,6 @@
+cmake_minimum_required( VERSION 3.22.1 )
+project( imgui-static )
+
 add_library( imgui STATIC
 	imgui/imgui.cpp
 	imgui/imgui.h

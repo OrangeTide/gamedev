@@ -1,6 +1,11 @@
+cmake_minimum_required( VERSION 3.22.1 )
+project( gamedevdemos )
 include_directories( include )
 add_subdirectory( sokol )
 add_subdirectory( imgui )
-add_subdirectory( demo1 )
-add_subdirectory( demo2 )
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
+	# disable components that aren't set up for Android yet
+	add_subdirectory( demo1 )
+	add_subdirectory( demo2 )
+endif()
 add_subdirectory( demo3 )

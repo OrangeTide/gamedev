@@ -1,3 +1,5 @@
+cmake_minimum_required( VERSION 3.22.1 )
+project( sokol-static )
 add_library(sokol STATIC
 	sokol.c
 	sokol_gfx.h

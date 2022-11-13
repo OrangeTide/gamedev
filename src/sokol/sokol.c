@@ -8,6 +8,8 @@
 // NOTE: on macOS, sokol.c is compiled explicitly as ObjC 
 //#define SOKOL_GLCORE33
 #define SOKOL_METAL
+#elif defined(__ANDROID__)
+#define SOKOL_GLES3
 #else
 #define SOKOL_GLCORE33
 #endif
