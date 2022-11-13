@@ -62,7 +62,7 @@ jobs:
         with:
           gradle-task: assembleDebug
           project-path: android
-          output-path: app/build/outputs/apk/debug/app-debug.apk
+          output-path: output.apk
           browserstack-upload: false
           browserstack-username: ${{ secrets.BROWSERSTACK_USERNAME }}
           browserstack-access-key: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
