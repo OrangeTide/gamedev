@@ -1,19 +1,21 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 29
+    namespace 'com.orangetide.demo3'
+    compileSdkVersion 33
     ndkVersion '22.1.7171670'
 
     defaultConfig {
-        applicationId = 'com.example.native_activity'
+        applicationId = 'com.orangetide.demo3'
         minSdkVersion 19
-        targetSdkVersion 28
+        targetSdkVersion 33
         externalNativeBuild {
             cmake {
                 arguments '-DANDROID_STL=c++_static'
             }
         }
     }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -21,17 +23,17 @@ android {
                     'proguard-rules.pro'
         }
     }
+
     externalNativeBuild {
         cmake {
             version '3.22.1'
             path '../../src/CMakeLists.txt'
         }
     }
-    namespace 'com.example.native_activity'
 }
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation 'androidx.appcompat:appcompat:1.0.2'
-    implementation 'androidx.constraintlayout:constraintlayout:1.1.3'
+    implementation 'androidx.appcompat:appcompat:1.5.1'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 }
