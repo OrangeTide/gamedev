@@ -1,7 +1,13 @@
 /* screen.c */
 #include "screen.h"
 #include "state.h"
-#include "palette.glsl.h"
+#if defined(__ANDROID__)
+#include "palette.glsl.android.h"
+#elif defined(__EMSCRIPTEN__)
+#include "palette.glsl.webgl.h"
+#else
+#include "palette.glsl.gl.h"
+#endif
 
 #include <stdlib.h>
 #include <sokol_gfx.h>

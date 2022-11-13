@@ -2,7 +2,13 @@
 #include "state.h"
 #include "graphics.h"
 #include "screen.h"
-#include "palette.glsl.h"
+#if defined(__ANDROID__)
+#include "palette.glsl.android.h"
+#elif defined(__EMSCRIPTEN__)
+#include "palette.glsl.webgl.h"
+#else
+#include "palette.glsl.gl.h"
+#endif
 
 #include <sokol_app.h>
 #include <sokol_glue.h>
