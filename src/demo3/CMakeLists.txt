@@ -15,39 +15,30 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Android")
 	#### Android Build ####
 	#######################
 
-	# build native_app_glue as a static lib
-	set( ${CMAKE_C_FLAGS}, "${CMAKE_C_FLAGS}" )
-	add_library( native_app_glue STATIC
-		${ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c
-		)
+	add_library( demo3 SHARED ${demo3_sources} )
 
-	# now build app's shared lib
-	set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++11 -Wall -Werror" )
+	target_compile_options( demo3
+		PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-std=gnu++11 -Wall -Werror>
+		)
 
 	# Export ANativeActivity_onCreate(),
 	# Refer to: https://github.com/android-ndk/ndk/issues/381.
-	set( CMAKE_SHARED_LINKER_FLAGS
-		"${CMAKE_SHARED_LINKER_FLAGS} -u ANativeActivity_onCreate"
+	target_link_options( demo3
+		PRIVATE "-u ANativeActivity_onCreate"
 		)
-
-	add_library( demo3 SHARED ${demo3_sources} )
-
-	target_include_directories( demo3 PRIVATE
-		${ANDROID_NDK}/sources/android/native_app_glue )
 
 	# add lib dependencies
 	target_link_libraries( demo3
 		PRIVATE sokol
 		PRIVATE cimgui
 		PRIVATE android
-		#NOT NEEDED:	PRIVATE native_app_glue
 		PRIVATE EGL
 		PRIVATE GLESv3
 		PRIVATE OpenSLES
 		PRIVATE log
 		)
 
-	# the app glue and manifests assume the name is libnative-activity.so
+	# the library name must match the one used in android/app/src/main/AndroidManifest.xml
 	set_target_properties(demo3 PROPERTIES OUTPUT_NAME "native-activity")
 else()
 	#######################################
