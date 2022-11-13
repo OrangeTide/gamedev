@@ -2,7 +2,6 @@ add_executable( demo2 demo2.c )
 
 target_compile_options( demo2
 	PRIVATE -Wall -W -O2
-	PUBLIC -flto -g
 	)
 
 target_compile_definitions( demo2

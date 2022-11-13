@@ -49,7 +49,6 @@ else()
 
 	target_compile_options( demo3
 		PRIVATE -Wall -W -O2
-		PUBLIC -flto -g
 		)
 endif()
 

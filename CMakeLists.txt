@@ -1,5 +1,5 @@
 project( game LANGUAGES C CXX )
-cmake_minimum_required( VERSION 3.7 )
+cmake_minimum_required( VERSION 3.22.1 )
 
 if ( ${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR} )
 	message( FATAL_ERROR "In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there. You may need to remove CMakeCache.txt." )
@@ -15,8 +15,14 @@ SET( CMAKE_C_ARCHIVE_CREATE "<CMAKE_AR> qcs <TARGET> <LINK_FLAGS> <OBJECTS>"  )
 SET( CMAKE_C_ARCHIVE_FINISH true )
 
 if (NOT EMSCRIPTEN)
-set( THREADS_PREFER_PTHREAD_FLAG ON )
-find_package( Threads REQUIRED )
+	set( THREADS_PREFER_PTHREAD_FLAG ON )
+	find_package( Threads REQUIRED )
+endif()
+
+include(CheckIPOSupported)
+check_ipo_supported(RESULT result)
+if(result)
+	set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
 
 add_subdirectory( src )
