@@ -182,8 +182,9 @@ _PROVIDES_CPPFLAGS.${NAME} += $(_CPPFLAGS.${NAME})
 _PROVIDES_CXXFLAGS.${NAME} := $(_CXXFLAGS.${NAME})
 _PROVIDES_CFLAGS.${NAME} := $(_CFLAGS.${NAME})
 endif
-$(eval _SRCS.${NAME} := $(wildcard $(addprefix ${CURRENT_PROJECT_DIR}, ${SRCS} ${SRCS.$(TARGET_OS)} ${SRCS.$(TARGET_ARCH)} ${SRCS.$(TARGET_OS).$(TARGET_ARCH)})))
+$(eval _SRCS.${NAME} := $(strip $(wildcard $(addprefix ${CURRENT_PROJECT_DIR}, ${SRCS} ${SRCS.$(TARGET_OS)} ${SRCS.$(TARGET_ARCH)} ${SRCS.$(TARGET_OS).$(TARGET_ARCH)}))))
 _EXTRA.${NAME} := ${EXTRA} ${EXTRA.$(TARGET_OS)} ${EXTRA.$(TARGET_ARCH)} ${EXTRA.$(TARGET_OS).$(TARGET_ARCH)}
+$(if $(_SRCS.${NAME}),,$(error No SRCS found!))
 $(call set-sources,${NAME},${_SRCS.${NAME}})
 $(eval _REAL_OBJS.${NAME} := ${OBJS} $(foreach X,${EXTENSIONS},$(patsubst %.$X,$(BUILDDIR)%.o,$(filter %.$X,${_SRCS.${NAME}}))))
 ALL_DEPS := ${ALL_DEPS} $(patsubst %.o,%.d,${_REAL_OBJS.$(NAME)})

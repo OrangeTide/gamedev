@@ -1,0 +1,19 @@
+$(BEGIN_TARGET)
+NAME = initgl
+TYPE = lib
+SRCS = *.c
+INCLUDEDIR = include
+CFLAGS = -Wall -W -O2
+CFLAGS += -g
+### Windows
+SRCS.Windows_NT = win32/*.c
+INCLUDEDIR.Windows_NT = win32/include
+CFLAGS.Windows_NT = -mwin32
+LDLIBS.Windows_NT = -lkernel32 -luser32 -lshell32 -lopengl32 -lgdi32
+### Linux
+SRCS.Linux = unix/*.c linux/*.c
+INCLUDEDIR.Linux = unix/include
+LDLIBS.Linux = -lm -ldl -lEGL -lGLESv2 -lX11 -lXcursor -lXi
+CFLAGS.Linux = -flto=auto
+LDFLAGS.Linux = -flto=auto
+$(END_TARGET)
