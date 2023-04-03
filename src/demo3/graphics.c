@@ -10,9 +10,7 @@
 #include "palette.glsl.gl.h"
 #endif
 
-#include <sokol_app.h>
-#include <sokol_glue.h>
-#include <sokol_gfx.h>
+#include <initgl.h>
 
 void
 gfx_init(void)

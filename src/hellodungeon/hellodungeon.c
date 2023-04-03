@@ -1,13 +1,10 @@
 /* hellodungeon.c */
-#include <sokol_app.h>
-#include <sokol_gamepad.h>
-// #include <sokol_audio.h>
-
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <initgl.h>
 #include "graphics.h"
 #include "gui.h"
 #include "input.h"

@@ -10,7 +10,7 @@
 #endif
 
 #include <stdlib.h>
-#include <sokol_gfx.h>
+#include <initgl.h>
 
 void
 screen_init(int width, int height)

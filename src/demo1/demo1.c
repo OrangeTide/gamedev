@@ -1,12 +1,9 @@
-#include "sokol_app.h"
-#include "sokol_gfx.h"
-#include "sokol_audio.h"
-#include "sokol_glue.h"
-#include "HandmadeMath.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
+#include <initgl.h>
+#include "HandmadeMath.h"
 #include "cube-sapp.glsl.h"
 
 /***********************************************************************

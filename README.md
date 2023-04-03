@@ -4,8 +4,6 @@ Collection of my studies in game development.
 
 ## Description
 
-Uses [Sokol](https://github.com/floooh/sokol) to implement some prototype games.
-
 ## Getting Started
 
 ### Desktop
@@ -73,8 +71,6 @@ This project is licensed under the [0BSD License](LICENSE)
 
 ## Acknowledgments
 
-  * [sokol](https://github.com/floooh/sokol)
-  * [sokol-samples](https://github.com/floooh/sokol-samples)
   * [Dear ImGui](https://github.com/ocornut/imgui)
   * [cimgui](https://github.com/cimgui/cimgui)
   * [bq_websocket](https://github.com/bqqbarbhg/bq_websocket)

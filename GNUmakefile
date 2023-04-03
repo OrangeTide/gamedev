@@ -1,0 +1,245 @@
+# Jon's Modular Makefile
+# You are free to modify, rename, steal, or redistribute this file.
+# Version: April 2023
+############################################################################
+# Usage:
+# 1. Modify PROJECTS variable in this file to scan your source directories.
+# 2. Create a .prj file in each source directory describing your project(s).
+# 3. Run `make` (must be GNU make)
+# 4. Look in bin/ or build/ for your executables and libraries
+############################################################################
+# TODO: support building shared libraries (TYPE=dll)
+#
+############################################################################
+PROJECTS := $(wildcard src/*.prj src/*/*.prj src/*/*/*.prj src/*/*/*/*.prj)
+
+HOSTCC := $(CC)
+HOSTCXX := $(CXX)
+CC = ${TOOLCHAIN_PREFIX}gcc
+CXX = ${TOOLCHAIN_PREFIX}g++
+LD = ${TOOLCHAIN_PREFIX}ld
+AS = ${TOOLCHAIN_PREFIX}as
+AR = ${TOOLCHAIN_PREFIX}ar
+OBJDUMP = ${TOOLCHAIN_PREFIX}objdump
+OBJCOPY = ${TOOLCHAIN_PREFIX}objcopy
+
+-include config.mk
+
+## Host OS and Architecture detection
+
+ifeq ($(OS),)
+OS := $(shell uname -s)
+endif
+
+ifeq ($(ARCH),)
+ARCH := $(shell uname -m)
+endif
+
+ifeq ($(OS),Windows_NT)
+TOOLCHAIN_OS=win32
+else ifeq ($(OS),Linux)
+TOOLCHAIN_OS=linux
+else ifeq ($(OS),Darwin)
+# TODO: detect legacy. TOOLCHAIN_OS=osx
+TOOLCHAIN_OS=osx_arm64
+else
+$(error Unsupported operating system $(OS))
+endif
+
+MKDIR := mkdir -p
+RMDIR := rmdir
+
+rmdir = $(if $1,$(RMDIR) $1)
+
+# platform config
+TARGET_OS ?= $(OS)
+TARGET_ARCH ?= $(ARCH)
+
+ifeq ($(TARGET_OS),Windows_NT)
+EXTENSION.exe = .exe
+EXTENSION.elf = .elf
+EXTENSION.dll = .dll
+EXTENSION.lib = .a
+# EXTENSION.a = .a
+EXTENSION.bin = .bin
+else
+EXTENSION.exe =
+EXTENSION.elf = .elf
+EXTENSION.dll = .so
+EXTENSION.lib = .a
+# EXTENSION.a = .a
+EXTENSION.bin = .bin
+endif
+
+EXTENSION.header = TBD
+
+# enable dependency generation for gcc
+CCOPTS.gcc = -MMD
+
+# TODO: detect compiler
+CCOPTS = $(CCOPTS.gcc)
+
+## Core Makefile
+
+TOP := $(dir $(lastword ${MAKEFILE_LIST}))
+EXTENSIONS := c cpp S
+
+.SUFFIXES:
+.SUFFIXES: $(addprefix .,$(EXTENSIONS))
+
+BUILDDIR := ${TOP}build/$(TARGET_OS)-$(TARGET_ARCH)/
+TARGETDIR.exe := ${TOP}bin/$(TARGET_OS)-$(TARGET_ARCH)/
+TARGETDIR.elf := ${TOP}bin/$(TARGET_OS)-$(TARGET_ARCH)/
+TARGETDIR.dll := ${TOP}bin/$(TARGET_OS)-$(TARGET_ARCH)/
+TARGETDIR.bin := ${TOP}bin/$(TARGET_OS)-$(TARGET_ARCH)/
+TARGETDIR.lib := ${BUILDDIR}lib/
+# TARGETDIR.a := ${BUILDDIR}lib/
+
+# hack: manually add any empty directories.
+BUILD_DIRS := $(BUILDDIR) $(BUILDDIR)src/ $(BUILDDIR)src/arch/ $(TARGETDIR.lib)
+
+all ::
+clean ::
+clean-bins :: ; $(RM) $(ALL_DEPS)
+clean-all :: clean clean-bins ; -$(call rmdir,$(wildcard $(call reverse,$(BUILD_DIRS))))
+.PHONY : all clean clean-all clean-bins distclean
+distclean : clean-all
+	-rmdir $(BUILDDIR)
+	-rmdir $(dir $(BUILDDIR))
+	-rmdir $(TARGETDIR.exe)
+	-rmdir $(dir $(TARGETDIR.exe))
+
+# build actions
+link.exe = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ $(LDFLAGS) $^ $(LDLIBS)
+link.elf = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ $(LDFLAGS) $(if $(LINKERFILE),-T $(LINKERFILE)) $^ $(LDLIBS)
+# TODO: support building Windows dll
+link.dll = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ -shared -Wl,-soname=$@.0 $(LDFLAGS) $^ $(LDLIBS)
+link.bin = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ $(LDFLAGS) $^ $(LDLIBS)
+link.lib = $(if $^,$(AR) $(ARFLAGS) $@ $^,$(error No files for archive))
+# link.a = $(AR) $(ARFLAGS) $@ $^
+compile.c = $(CC) -c -o $@ $(CCOPTS) $(CPPFLAGS) $(CFLAGS) $<
+compile.cpp = $(CXX) -c -o $@ $(CCOPTS) $(CPPFLAGS) $(CFLAGS) $(CXXFLAGS) $<
+compile.S = $(CC) -c -o $@ $(CPPFLAGS) $(ASFLAGS) $<
+
+# macros
+reverse = $(if $(1),$(call reverse,$(wordlist 2,$(words $(1)),$(1)))) $(firstword $(1))
+
+to-ext = $(foreach X,${EXTENSIONS},$(patsubst %.$X,%.$1,$(filter %.$X,$2)))
+set-sources = $(foreach X,${EXTENSIONS},$(eval _SRCS_$X.$1 := $(filter %.$X,$2)))
+
+undefine-many = $(foreach V,$1,$(eval undefine $V))
+undefine-many-os = $(call undefine-many,$1 $(addsuffix .${OS},$1) $(addsuffix .${OS}.${ARCH},$1) $(addsuffix .${ARCH},$1))
+
+# clear project config variables
+define clear-vars
+$(call undefine-many,NAME EXEC TYPE)
+$(call undefine-many-os,SRCS OBJS CFLAGS CXXFLAGS CPPFLAGS LDFLAGS LDLIBS ASFLAGS USES EXTRA INCLUDEDIR LINKERFILE)
+endef
+
+define begin-project
+$(eval CURRENT_PROJECT_DIR := $(dir $(lastword ${MAKEFILE_LIST})))
+HERE := ${CURRENT_PROJECT_DIR}
+endef
+
+TARGET_LIST :=
+
+# store NAME, TYPE, SRCS, OBJS, etc to project database
+define store-project
+$(eval $(if ${NAME},,$(error NAME is not defined in $(lastword ${MAKEFILE_LIST}))))
+$(eval $(if ${TYPE},,$(error TYPE is not defined in $(lastword ${MAKEFILE_LIST}) for ${NAME})))
+_BASEDIR.${NAME} := ${CURRENT_PROJECT_DIR}
+$(eval _TYPE.${NAME} := $${TYPE})
+ifeq ($(_TYPE.${NAME}),header)
+_EXEC.${NAME} :=
+else
+TARGET_LIST := ${TARGET_LIST} ${NAME}
+_EXEC_BASE.${NAME} := $(if ${EXEC},${EXEC},${NAME})
+$(eval _EXEC.${NAME} := ${TARGETDIR.${_TYPE.${NAME}}}${if ${EXEC},${EXEC},${NAME}}${EXTENSION.${_TYPE.${NAME}}})
+endif
+$(eval _CFLAGS.${NAME} := ${CFLAGS} ${CFLAGS.$(TARGET_OS)} ${CFLAGS.$(TARGET_ARCH)} ${CFLAGS.$(TARGET_OS).$(TARGET_ARCH)})
+$(eval _CXXFLAGS.${NAME} := ${CXXFLAGS} ${CXXFLAGS.$(TARGET_OS)} ${CXXFLAGS.$(TARGET_ARCH)} ${CXXFLAGS.$(TARGET_OS).$(TARGET_ARCH)})
+$(eval _CPPFLAGS.${NAME} := \
+	${CPPFLAGS} ${CPPFLAGS.$(TARGET_OS)} ${CPPFLAGS.$(TARGET_ARCH)} ${CPPFLAGS.$(TARGET_OS).$(TARGET_ARCH)} \
+	$(addprefix -I${CURRENT_PROJECT_DIR}, \
+	${INCLUDEDIR} ${INCLUDEDIR.$(TARGET_OS)} ${INCLUDEDIR.$(TARGET_ARCH)} ${INCLUDEDIR.$(TARGET_OS).$(TARGET_ARCH)}) \
+	-I${CURRENT_PROJECT_DIR})
+_LDFLAGS.${NAME} := ${LDFLAGS} ${LDFLAGS.$(TARGET_OS)} ${LDFLAGS.$(TARGET_ARCH)} ${LDFLAGS.$(TARGET_OS).$(TARGET_ARCH)}
+$(eval _LDLIBS.${NAME} := ${LDLIBS} ${LDLIBS.$(TARGET_OS)} ${LDLIBS.$(TARGET_ARCH)} ${LDLIBS.$(TARGET_OS).$(TARGET_ARCH)})
+_ASFLAGS.${NAME} := ${ASFLAGS} ${ASFLAGS.$(TARGET_OS)} ${ASFLAGS.$(TARGET_ARCH)} ${ASFLAGS.$(TARGET_OS).$(TARGET_ARCH)}
+_LINKERFILE.${NAME} := ${LINKERFILE} ${LINKERFILE.$(TARGET_OS)} ${LINKERFILE.$(TARGET_ARCH)} ${LINKERFILE.$(TARGET_OS).$(TARGET_ARCH)}
+_OBJS.${NAME} := ${OBJS} ${OBJS.$(TARGET_OS)} ${OBJS.$(TARGET_ARCH)} ${OBJS.$(TARGET_OS).$(TARGET_ARCH)}
+_USES.${NAME} := ${USES} ${USES.$(TARGET_OS)} ${USES.$(TARGET_ARCH)} ${USES.$(TARGET_OS).$(TARGET_ARCH)}
+ifeq ($${TYPE},lib)
+_PROVIDES_LDLIBS.${NAME} := ${_LDLIBS.${NAME}}
+endif
+_PROVIDES_CPPFLAGS.${NAME} := \
+	$(if ${INCLUDEDIR}${INCLUDEDIR.$(TARGET_OS)}${INCLUDEDIR.$(TARGET_ARCH)}${INCLUDEDIR.$(TARGET_OS).$(TARGET_ARCH)}, \
+	$(addprefix -I${CURRENT_PROJECT_DIR}, \
+	${INCLUDEDIR} ${INCLUDEDIR.$(TARGET_OS)} ${INCLUDEDIR.$(TARGET_ARCH)} ${INCLUDEDIR.$(TARGET_OS).$(TARGET_ARCH)}), \
+	-I${CURRENT_PROJECT_DIR})
+ifeq ($${TYPE},header)
+_PROVIDES_CPPFLAGS.${NAME} += $(_CPPFLAGS.${NAME})
+_PROVIDES_CXXFLAGS.${NAME} := $(_CXXFLAGS.${NAME})
+_PROVIDES_CFLAGS.${NAME} := $(_CFLAGS.${NAME})
+endif
+$(eval _SRCS.${NAME} := $(wildcard $(addprefix ${CURRENT_PROJECT_DIR}, ${SRCS} ${SRCS.$(TARGET_OS)} ${SRCS.$(TARGET_ARCH)} ${SRCS.$(TARGET_OS).$(TARGET_ARCH)})))
+_EXTRA.${NAME} := ${EXTRA} ${EXTRA.$(TARGET_OS)} ${EXTRA.$(TARGET_ARCH)} ${EXTRA.$(TARGET_OS).$(TARGET_ARCH)}
+$(call set-sources,${NAME},${_SRCS.${NAME}})
+$(eval _REAL_OBJS.${NAME} := ${OBJS} $(foreach X,${EXTENSIONS},$(patsubst %.$X,$(BUILDDIR)%.o,$(filter %.$X,${_SRCS.${NAME}}))))
+ALL_DEPS := ${ALL_DEPS} $(patsubst %.o,%.d,${_REAL_OBJS.$(NAME)})
+BUILD_DIRS := $$(sort $$(BUILD_DIRS) $$(dir $$(_REAL_OBJS.${NAME})))
+CURRENT_PROJECT_DIR := # empty
+endef
+
+define add-target
+$(info Found ${_EXEC_BASE.$1} ... TYPE=${_TYPE.$1} $(if ${_USES.$1},USES=${_USES.$1}))
+ifneq (${_TYPE.$1},header)
+all :: ${_EXEC.$1}
+${_EXEC.$1} : ${_REAL_OBJS.$1} $(foreach u,${_USES.$1},${_EXEC.$u}) | $(dir ${_EXEC.$1}) ; $$(link.${_TYPE.$1})
+${_EXEC.$1} : SRCS_CPP = ${_SRCS_cpp.$1}
+${_EXEC.$1} : CFLAGS = ${_CFLAGS.$1} $(foreach u,${_USES.$1},${_PROVIDES_CFLAGS.$u})
+${_EXEC.$1} : CXXFLAGS = ${_CXXFLAGS.$1} $(foreach u,${_USES.$1},${_PROVIDES_CXXFLAGS.$u})
+${_EXEC.$1} : CPPFLAGS = ${_CPPFLAGS.$1} -I${_BASEDIR.$1} $(foreach u,${_USES.$1},${_PROVIDES_CPPFLAGS.$u})
+${_EXEC.$1} : LDFLAGS = ${_LDFLAGS.$1} $(foreach u,${_USES.$1},${_PROVIDES_LDFLAGS.$u})
+${_EXEC.$1} : LDLIBS = ${_LDLIBS.$1} $(foreach u,${_USES.$1},${_PROVIDES_LDLIBS.$u})
+${_EXEC.$1} : ASFLAGS = ${_ASFLAGS.$1}
+${_EXEC.$1} : LINKERFILE = ${_LINKERFILE.$1}
+${_REAL_OBJS.$1} : | $(addprefix ${_BASEDIR.$1},${_EXTRA.$1})
+clean-bins :: ; $$(RM) ${_EXEC.$1}
+ifneq (${_REAL_OBJS.$1},)
+clean :: ; $$(RM) ${_REAL_OBJS.$1}
+endif
+endif
+endef
+
+# Create missing directories
+%/ : ; @echo Creating $@ ; $(MKDIR) $@
+.PRECIOUS : %/
+
+# generate rules
+.SECONDEXPANSION :
+$(foreach X,${EXTENSIONS},$(eval $(BUILDDIR)%.o : %.$X | $$$$(@D)/ ; $$(compile.$X)))
+
+# save any parameters to apply later to all projects
+GLOBAL_CFLAGS := $(CFLAGS)
+GLOBAL_CXXFLAGS := $(CXXFLAGS)
+GLOBAL_CPPFLAGS := $(CPPFLAGS)
+GLOBAL_LDFLAGS := $(LDFLAGS)
+GLOBAL_LDLIBS := $(LDLIBS)
+GLOBAL_ASFLAGS := $(ASFLAGS)
+
+$(info BUILDDIR=${BUILDDIR})
+$(info OS=${OS} ARCH=${ARCH})
+
+# Each project file must wrap beginning and end of project sections with these
+BEGIN_TARGET = $(eval $(call clear-vars) $(call begin-project))
+END_TARGET = $(eval $(call store-project))
+
+include $(PROJECTS)
+
+# $(info TARGET_LIST = ${TARGET_LIST})
+$(eval $(call clear-vars))
+$(foreach T,${TARGET_LIST},$(eval $(call add-target,$T)))
+
+ALL_DEPS := $(sort ${ALL_DEPS})
+-include ${ALL_DEPS}
