@@ -32,7 +32,12 @@ OS := $(shell uname -s)
 endif
 
 ifeq ($(ARCH),)
+ifeq ($(OS),Windows_NT)
+# TODO: detect architecture on Windows
+ARCH := x86_64
+else
 ARCH := $(shell uname -m)
+endif
 endif
 
 ifeq ($(OS),Windows_NT)
@@ -46,7 +51,12 @@ else
 $(error Unsupported operating system $(OS))
 endif
 
+ifeq ($(OS),Windows_NT)
+# TODO: fix this hack around my PATH setup issue
+MKDIR := C:/msys64/usr/bin/mkdir -p
+else
 MKDIR := mkdir -p
+endif
 RMDIR := rmdir
 
 rmdir = $(if $1,$(RMDIR) $1)
@@ -60,14 +70,12 @@ EXTENSION.exe = .exe
 EXTENSION.elf = .elf
 EXTENSION.dll = .dll
 EXTENSION.lib = .a
-# EXTENSION.a = .a
 EXTENSION.bin = .bin
 else
 EXTENSION.exe =
 EXTENSION.elf = .elf
 EXTENSION.dll = .so
 EXTENSION.lib = .a
-# EXTENSION.a = .a
 EXTENSION.bin = .bin
 endif
 
@@ -81,7 +89,7 @@ CCOPTS = $(CCOPTS.gcc)
 
 ## Core Makefile
 
-TOP := $(dir $(lastword ${MAKEFILE_LIST}))
+TOP := $(dir $(lastword $(subst \,/,${MAKEFILE_LIST})))
 EXTENSIONS := c cpp S
 
 .SUFFIXES:
@@ -108,10 +116,12 @@ distclean : clean-all
 	-rmdir $(dir $(BUILDDIR))
 	-rmdir $(TARGETDIR.exe)
 	-rmdir $(dir $(TARGETDIR.exe))
+default : all
+test : ; @echo TODO: implement test launching
 
 config.mk :
-	@echo "Select a configuration from configs/"
-	@ls -1 configs/*
+	@echo "Select a configuration from configs/ and copy into config.mk"
+	@ls -1 configs/*.mk
 	@exit 1
 
 # build actions
@@ -121,7 +131,6 @@ link.elf = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ $(LDFLAGS) $(if $(LINKERFILE),-T
 link.dll = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ -shared -Wl,-soname=$@.0 $(LDFLAGS) $^ $(LDLIBS)
 link.bin = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ $(LDFLAGS) $^ $(LDLIBS)
 link.lib = $(if $^,$(AR) $(ARFLAGS) $@ $^,$(error No files for archive))
-# link.a = $(AR) $(ARFLAGS) $@ $^
 compile.c = $(CC) -c -o $@ $(CCOPTS) $(CPPFLAGS) $(CFLAGS) $<
 compile.cpp = $(CXX) -c -o $@ $(CCOPTS) $(CPPFLAGS) $(CFLAGS) $(CXXFLAGS) $<
 compile.S = $(CC) -c -o $@ $(CPPFLAGS) $(ASFLAGS) $<
