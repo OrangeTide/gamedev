@@ -23,7 +23,7 @@ AR = ${TOOLCHAIN_PREFIX}ar
 OBJDUMP = ${TOOLCHAIN_PREFIX}objdump
 OBJCOPY = ${TOOLCHAIN_PREFIX}objcopy
 
-include config.mk
+-include config.mk
 
 ## Host OS and Architecture detection
 
@@ -122,7 +122,7 @@ test : ; @echo TODO: implement test launching
 config.mk :
 	@echo "Select a configuration from configs/ and copy into config.mk"
 	@ls -1 configs/*.mk
-	@exit 1
+	@false
 
 # build actions
 link.exe = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ $(LDFLAGS) $^ $(LDLIBS)

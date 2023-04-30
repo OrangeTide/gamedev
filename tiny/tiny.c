@@ -1,3 +1,5 @@
+// Windows Only
+// TODO: add Linux/EGL support
 #ifndef UNICODE
 # define UNICODE
 # define _UNICODE
