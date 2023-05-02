@@ -1,5 +1,9 @@
 #include "initgl.h"
 
+#ifndef EGL_OPENGL_ES3_BIT_KHR
+#define EGL_OPENGL_ES3_BIT_KHR 0x00000040
+#endif
+
 /**********************************************************************/
 
 struct xwindow_info;
@@ -18,11 +22,20 @@ int terminate_flag;
 static const
 EGLint config_attribs[] = {
 	EGL_SURFACE_TYPE, EGL_WINDOW_BIT, // | EGL_PBUFFER_BIT
-	EGL_BLUE_SIZE, 8,
-	EGL_GREEN_SIZE, 8,
 	EGL_RED_SIZE, 8,
-	EGL_DEPTH_SIZE, 8,
-	EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+	EGL_GREEN_SIZE, 8,
+	EGL_BLUE_SIZE, 8,
+	EGL_ALPHA_SIZE, 8,
+	EGL_DEPTH_SIZE, 16,
+	EGL_STENCIL_SIZE, 8,
+	EGL_SAMPLE_BUFFERS, 0,
+	EGL_SAMPLES, 0,
+	EGL_NONE
+};
+
+static const
+EGLint gles_attr_list[] = {
+	EGL_CONTEXT_CLIENT_VERSION, 2,
 	EGL_NONE
 };
 
@@ -127,14 +140,14 @@ display_init(void)
 	//// EGL ////
 
 	display = eglGetDisplay(xdisplay);
-	if (!display) {
+	if (display == EGL_NO_DISPLAY) {
 		report_error("No EGL display available.");
 		XCloseDisplay(xdisplay);
 		return INITGL_ERR;
 	}
 
 	EGLint major, minor;
-	if (!eglInitialize(display, &major, &minor)) {
+	if (eglInitialize(display, &major, &minor) == EGL_FALSE) {
 		report_error("Unable to initialize EGL.");
 		eglTerminate(display);
 		XCloseDisplay(xdisplay);
@@ -146,6 +159,53 @@ display_init(void)
 		eglQueryString(display, EGL_VENDOR));
 
 	// default: eglBindAPI(EGL_OPENGL_ES_API);
+
+#if 0 // DEBUG
+	/* Dump some information about the EGL and GLES we've initialized */
+	EGLint num_config;
+	EGLBoolean result = eglGetConfigs(display, NULL, 0, &num_config);
+	if (!result || !num_config) {
+		report_error("No EGL configs available");
+		terminate_flag = 1;
+		return INITGL_ERR;
+	}
+
+	EGLConfig *configs = malloc(sizeof(EGLConfig) * num_config);
+	if (!configs) {
+		report_error("Out of memory for EGL configs");
+		terminate_flag = 1;
+		return INITGL_ERR;
+	}
+	result = eglGetConfigs(display, configs, num_config, &num_config);
+	if (!result || !num_config) {
+		report_error("No EGL configs available");
+		terminate_flag = 1;
+		return INITGL_ERR;
+	}
+
+	int i;
+	for (i = 0; i < num_config; i++) {
+		log_debug("Config #%u", i);
+		EGLint value;
+#define SHOW(x) \
+		if (eglGetConfigAttrib(display, configs[i], x, &value) == EGL_TRUE) { \
+			log_debug("    " #x "=%d", value); \
+		} else { \
+			log_debug("    " #x "=ERROR"); \
+		}
+
+		SHOW(EGL_CONFIG_ID);
+		SHOW(EGL_RENDERABLE_TYPE);
+		SHOW(EGL_ALPHA_SIZE);
+		SHOW(EGL_RED_SIZE);
+		SHOW(EGL_GREEN_SIZE);
+		SHOW(EGL_BLUE_SIZE);
+#undef SHOW
+	}
+
+
+	free(configs);
+#endif
 
 	return INITGL_OK;
 }
@@ -179,8 +239,8 @@ int
 window_new(const struct window_callback_functions *callbacks)
 {
 	EGLint num_config;
-	eglChooseConfig(display, config_attribs, &config, 1, &num_config);
-	if (!num_config) {
+	EGLBoolean result = eglChooseConfig(display, config_attribs, &config, 1, &num_config);
+	if (!result || !num_config) {
 		report_error("No EGL configs available");
 		terminate_flag = 1;
 		return INITGL_ERR;
@@ -194,7 +254,7 @@ window_new(const struct window_callback_functions *callbacks)
 	};
 	info->native_window = native_window_create(info->out_width, info->out_height);
 	info->surface = eglCreateWindowSurface(display, config, info->native_window, NULL);
-	info->context = eglCreateContext(display, config, EGL_NO_CONTEXT, NULL);
+	info->context = eglCreateContext(display, config, EGL_NO_CONTEXT, gles_attr_list);
 	eglMakeCurrent(display, info->surface, info->surface, info->context),
 	current_xwindow_info = info;
 

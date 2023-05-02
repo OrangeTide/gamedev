@@ -7,6 +7,14 @@
 #define INITGL_OK (0)
 #define INITGL_ERR (-1)
 
+#define initgl_gl_check() do { \
+		GLenum e = glGetError(); \
+		if (e != GL_NO_ERROR) {\
+			log_error("%s:%d:%s():GL error = 0x%04x\n", __FILE__, __LINE__, __func__, e); \
+			abort(); \
+		} \
+	} while(0)
+
 extern int terminate_flag;
 
 typedef void window_paintfunc(void);
