@@ -15,7 +15,7 @@ Collection of my studies in game development.
   * cmake 2.8 or newer
   * GNU Make (optional)
 
-##### Ubuntu 22.04
+##### Ubuntu 22.04 / Raspbian (64-bit aarch64)
 
 ```sh
 sudo apt-get install -y build-essential git cmake
@@ -29,37 +29,7 @@ sudo apt-get install -y libx11-dev libxext-dev libxfixes-dev libxi-dev \
 
 ### Executing the Program
 
-  * Run `bin/demo3` or any of the other studies in bin.
-
-![demo3 screenshot](doc/Screenshot_2022-09-19_23-13-25.png)
-
-### Android
-
-#### Dependencies
-
-  * Android Studio 2021.3.1 Patch 1 or later.
-  * Android SDK 33
-
-#### Building
-
-From Android Studio:
-
-  * Navigate to "File" then "Open..."
-  * select directory `android/`
-
-From command-line:
-
-  * Run `./gradlew assembleDebug`
-
-#### Executing
-
-From Android Studio:
-
-  * Setup an emulator in "Device Manager"
-    * Android 11.0 Pixel 4 API 30 for 32-bit x86 is a reasonable choice
-  * Click the the run arrow
-
-(TODO: describe how to do this from command-line)
+  * Run `./bin/Linux-aarch64/demo4` or any of the other built programs.
 
 ## Help
 
