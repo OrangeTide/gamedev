@@ -9,15 +9,23 @@
 #include <GLES2/gl2ext.h>
 #include <ctype.h>
 #include <string.h>
-#include <stdio.h>
 
 #include "initgl.h"
+#include "log.h"
 
 /**********************************************************************/
 
 #ifndef INITGL_MAX_WINDOWS
 #define INITGL_MAX_WINDOWS 4
 #endif
+
+#define initgl_egl_check() do { \
+		GLenum e = eglGetError(); \
+		if (e != EGL_SUCCESS) {\
+			log_error("%s:%d:%s():EGL error = 0x%04x\n", __FILE__, __LINE__, __func__, e); \
+			abort(); \
+		} \
+	} while(0)
 
 #if 0
 enum {
@@ -290,9 +298,6 @@ window_new(const struct window_callback_functions *callback)
 	/* add the new window to the list */
 	window[win_index] = (struct win_info){ .hWnd = hwnd, .callback = *callback };
 
-	/* select the new window */
-	current_index = win_index;
-
 	// TODO: move into display_init(). create a dummy window to initialize a display
 
 	if (eglDisplay == EGL_NO_DISPLAY) {
@@ -300,9 +305,12 @@ window_new(const struct window_callback_functions *callback)
 		eglDisplay = eglGetDisplay(hdc);
 
 		// Initialize EGL for this display, returns EGL version
-		EGLint eglVersionMajor, eglVersionMinor;
-		eglInitialize(eglDisplay, &eglVersionMajor, &eglVersionMinor);
-		fprintf(stderr, "EGL version %d.%d", eglVersionMajor, eglVersionMinor);
+		EGLint major, minor;
+		eglInitialize(eglDisplay, &major, &minor);
+		log_debug("EGL %u.%u version: %s (%s)", major, minor,
+			eglQueryString(eglDisplay, EGL_VERSION),
+			eglQueryString(eglDisplay, EGL_VENDOR));
+		initgl_egl_check();
 	}
 
 	EGLint configAttributes[] = {
@@ -339,11 +347,26 @@ window_new(const struct window_callback_functions *callback)
 	EGLint surfaceAttributes[] = { EGL_NONE };
 	EGLSurface eglSurface = eglCreateWindowSurface(eglDisplay, windowConfig, hwnd, surfaceAttributes);
 
+	initgl_egl_check();
+
 	EGLint contextAttributes[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
 	EGLContext eglContext = eglCreateContext(eglDisplay, windowConfig, NULL, contextAttributes);
 
+	if (eglContext == EGL_NO_CONTEXT) {
+		MessageBox(NULL, TEXT("Unable to create EGL context"), TEXT("Error"), MB_OK);
+		window[win_index].alive = FALSE;
+		DestroyWindow(hwnd);
+		return INITGL_ERR;
+	}
+
+	eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
+
+	initgl_egl_check();
+
 	window[win_index].surface = eglSurface;
 	window[win_index].eglContext = eglContext;
+
+	log_debug("win_index=%d context=%p", win_index, eglContext);
 
 	// TODO: move GL context creation to this thread
 	// _hRenderThread = (HANDLE)_beginthreadex(NULL, 0, RenderMain, &args, 0, &_nRenderThreadID);
@@ -357,6 +380,9 @@ window_new(const struct window_callback_functions *callback)
 	SetForegroundWindow(hwnd);
 	SetFocus(hwnd);
 #endif
+
+	/* select the new window */
+	current_index = win_index;
 
 	return win_index;
 }
@@ -380,7 +406,7 @@ display_done(void)
 	for (i = 0; i < INITGL_MAX_WINDOWS; i++) {
 		struct win_info *info = &window[i];
 		if (info->alive == TRUE) {
-			fprintf(stderr, "TODO: clean up window %d", i);
+			log_debug("TODO: clean up window %d", i);
 
 			if (eglDisplay != EGL_NO_DISPLAY) {
 				eglDestroyContext(eglDisplay, info->eglContext);

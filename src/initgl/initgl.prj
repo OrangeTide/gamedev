@@ -9,7 +9,7 @@ CFLAGS += -g
 SRCS.Windows_NT = win32/*.c
 INCLUDEDIR.Windows_NT = win32/include
 CFLAGS.Windows_NT = -mwin32
-LDLIBS.Windows_NT = -lkernel32 -luser32 -lshell32 -lgdi32 -lEGL -lGLESv2
+LDLIBS.Windows_NT = -lgdi32 -lEGL -lGLESv2
 LIBDIR.Windows_NT = win32libs
 COPYFILES.Windows_NT = \
 	win32libs/d3dcompiler_47.dll \

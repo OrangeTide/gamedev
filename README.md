@@ -6,28 +6,48 @@ Collection of my studies in game development.
 
 ## Getting Started
 
-### Desktop
+## Installation & Development
 
-#### Dependencies
+### Dependencies
 
-  * Linux or Windows
-  * GCC or MSYS2/MinGW-w64
+  * Linux x86-64/ARM64 or Windows x86-64
+  * GCC or MSYS2/[MinGW-w64](https://www.mingw-w64.org/)
   * cmake 2.8 or newer
   * GNU Make (optional)
+  * ANGLE libaries (if building on Windows) - see `update-binaries.sh`
 
-##### Ubuntu 22.04 / Raspbian (64-bit aarch64)
+#### Ubuntu 22.04 x86-64 / Raspbian (64-bit aarch64)
 
-```sh
-sudo apt-get install -y build-essential git cmake
-sudo apt-get install -y libx11-dev libxext-dev libxfixes-dev libxi-dev \
-    libxcursor-dev libgl1-mesa-dev libglfw3-dev libasound2-dev
-```
+  ```sh
+  sudo apt-get install -y build-essential git cmake
+  sudo apt-get install -y libx11-dev libxext-dev libxfixes-dev libxi-dev \
+      libxcursor-dev libgl1-mesa-dev libglfw3-dev libasound2-dev
+  ```
 
-#### Building
+#### Windows x86-64
+
+Install MSYS2 and MINGW64.
+
+Install headers and libraries, from MSYS2 shell:
+
+  ```sh
+  cd src/initgl
+  download-headers.sh
+  cd win32libs
+  update-binaries.sh
+  ```
+
+### Building
 
   * Run `make`
 
-### Executing the Program
+Cross compile:
+
+  ```sh
+  make CONFIG=configs/mingw32_config.mk c
+  ```
+
+## Running
 
   * Run `./bin/Linux-aarch64/demo4` or any of the other built programs.
 
@@ -46,3 +66,4 @@ This project is licensed under the [0BSD License](LICENSE)
   * [bq_websocket](https://github.com/bqqbarbhg/bq_websocket)
   * [native-activity example](https://github.com/android/ndk-samples/tree/main/native-activity)
   * [stb](https://github.com/nothings/stb)
+  * [Chromium browser compiled with the Clang/LLVM compiler](https://github.com/RobRich999/Chromium_Clang)

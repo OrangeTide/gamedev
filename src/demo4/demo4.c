@@ -59,17 +59,14 @@ compile_shader(GLuint *program_out, const GLchar *vert_source, const GLchar *fra
 
 	unsigned i;
 	for (i = 0; i < sizeof(shader_parts) / sizeof(*shader_parts); i++) {
-		GLint compile_status;
+		GLint compile_status = GL_TRUE;
 		glGetShaderiv(shader_parts[i], GL_COMPILE_STATUS, &compile_status);
+		initgl_gl_check();
 		if (compile_status != GL_TRUE) {
-			GLint info_len = 0;
-			glGetShaderiv(shader_parts[i], GL_INFO_LOG_LENGTH, &info_len);
-			if (info_len > 255) {
-				info_len = 255;
-			}
-			char info[256];
-			glGetShaderInfoLog(shader_parts[i], info_len, NULL, info);
+			char info[256] = "Unknown";
+			glGetShaderInfoLog(shader_parts[i], sizeof(info), NULL, info);
 			log_error("GL shader #%u compile failure:%s", i, info);
+			initgl_gl_check();
 			return ERR;
 		}
 	}
@@ -77,21 +74,19 @@ compile_shader(GLuint *program_out, const GLchar *vert_source, const GLchar *fra
 	initgl_gl_check();
 
 	GLuint program = glCreateProgram();
+	assert(program != 0);
 	glAttachShader(program, vshader);
 	glAttachShader(program, fshader);
 	glLinkProgram(program);
 
 	GLint link_status;
 	glGetProgramiv(program, GL_LINK_STATUS, &link_status);
+	initgl_gl_check();
 	if (link_status != GL_TRUE) {
-		GLint info_len = 0;
-		glGetProgramiv(program, GL_INFO_LOG_LENGTH, &info_len);
-		if (info_len > 255) {
-				info_len = 255;
-		}
-		char info[256];
-		glGetProgramInfoLog(program, info_len, NULL, info);
+		char info[256] = "Unknown";
+		glGetProgramInfoLog(program, sizeof(info), NULL, info);
 		log_error("GL program link failure:%s", info);
+		initgl_gl_check();
 		return ERR;
 	}
 
