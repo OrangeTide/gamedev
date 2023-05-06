@@ -100,7 +100,7 @@ render_continue(void)
 static LRESULT CALLBACK
 MainWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
 	int cur = find_win(hWnd);
-	struct win_info *info = cur < 0 ? NULL : &window[cur];
+	struct win_info *info = cur == INITGL_ERR ? NULL : &window[cur];
 	switch (Msg) {
 
 #if 0 // TODO: support a render thread
@@ -192,17 +192,46 @@ MainWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
 		break;
 
 	case WM_PAINT: // TODO: Force a redraw through the render thread
-		if (cur != INITGL_ERR && window[cur].callback.paint) {
-			// PAINTSTRUCT ps;
-			// HDC hdc = BeginPaint(hWnd, &ps);
-			// window[cur].render_cb(hWnd, hdc, &ps.rcPaint);
-			// EndPaint(hWnd, &ps);
-			window[cur].callback.paint();
+		{
+			PAINTSTRUCT ps;
+			BeginPaint(hWnd, &ps);
+			if (info && info->callback.paint) {
+				log_debug("Painting ...");
+				if (info->callback.paint) {
+					info->callback.paint();
+					eglSwapBuffers(eglDisplay, info->surface);
+				}
+			}
+			EndPaint(hWnd, &ps);
 		}
 		return 0;
 	}
 
 	return DefWindowProc(hWnd, Msg, wParam, lParam);
+}
+
+int
+window_select(int num)
+{
+	if (num < 0 || num > INITGL_MAX_WINDOWS) {
+		return INITGL_ERR;
+	}
+
+	/* skip if we've cached */
+	if (current_index == num) {
+		return INITGL_OK;
+	}
+
+	struct win_info *info = &window[num];
+	if (info->alive == FALSE) {
+		return INITGL_ERR;
+	}
+	current_index = num;
+	if (info->surface && info->eglContext) {
+		eglMakeCurrent(eglDisplay, info->surface, info->surface, info->eglContext);
+	} else {
+		eglMakeCurrent(eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+	}
 }
 
 int
@@ -359,12 +388,15 @@ window_new(const struct window_callback_functions *callback)
 		return INITGL_ERR;
 	}
 
-	eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
-
-	initgl_egl_check();
-
+	window[win_index].alive = TRUE;
 	window[win_index].surface = eglSurface;
 	window[win_index].eglContext = eglContext;
+
+	/* select the window - see also window_select() */
+	eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
+	current_index = win_index;
+
+	initgl_egl_check();
 
 	log_debug("win_index=%d context=%p", win_index, eglContext);
 
@@ -380,9 +412,6 @@ window_new(const struct window_callback_functions *callback)
 	SetForegroundWindow(hwnd);
 	SetFocus(hwnd);
 #endif
-
-	/* select the new window */
-	current_index = win_index;
 
 	return win_index;
 }
@@ -429,12 +458,16 @@ process_events(void)
 {
 	MSG msg;
 
-	while (!terminate_flag && GetMessage(&msg, NULL, 0, 0) != 0) {
+	while (PeekMessage(&msg, 0, 0, 0, PM_REMOVE)) {
+		log_debug("msg=%d", msg.message);
 		TranslateMessage(&msg);
+		if (msg.message == WM_QUIT) {
+			log_debug("WM_QUIT");
+			terminate_flag = 1;
+		}
 		DispatchMessage(&msg);
 	}
 
-	// TODO: eglSwapBuffers(eglDisplay, eglSurface);
 	// TODO: if (_hRenderThread != NULL) CloseHandle(_hRenderThread);
 }
 
@@ -447,15 +480,20 @@ paint_all(void)
 
 	unsigned i;
 
+	int old_index = current_index;
 	for (i = 0; i < INITGL_MAX_WINDOWS; i++) {
 		struct win_info *info = &window[i];
 		if (info->alive == TRUE) {
-			if (info->callback.paint) {
-				info->callback.paint();
+			if (window_select(i) == INITGL_OK) {
+				if (info->callback.paint) {
+					info->callback.paint();
+				}
+				eglSwapBuffers(eglDisplay, info->surface);
+				MessageBox(NULL, TEXT("Swapped."), TEXT("Info"), MB_OK);
 			}
-			eglSwapBuffers(eglDisplay, info->surface);
 		}
 	}
+	window_select(old_index);
 }
 
 int
