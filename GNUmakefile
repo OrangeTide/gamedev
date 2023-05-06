@@ -1,18 +1,23 @@
 # Jon's Modular Makefile
 # You are free to modify, rename, steal, or redistribute this file.
-# Version: April 2023
+# Version: May 2023
 ############################################################################
 # Usage:
 # 1. Modify PROJECTS variable in this file to scan your source directories.
 # 2. Create a .prj file in each source directory describing your project(s).
 # 3. Run `make` (must be GNU make)
+#    a. optionally specify a config: `make CONFIG=configs/yourconfig.mk`
 # 4. Look in bin/ or build/ for your executables and libraries
+# 5. implement your tests in tests/test-somename.sh.
+#    a. run tests with `make test` or `make test-somename`
 ############################################################################
 # TODO: support building shared libraries (TYPE=dll)
 #
 ############################################################################
-PROJECTS := $(wildcard src/*.prj src/*/*.prj src/*/*/*.prj src/*/*/*/*.prj)
+TOP := $(dir $(lastword $(call fixpath,${MAKEFILE_LIST})))
+PROJECTS := $(wildcard *.prj src/*.prj src/*/*.prj src/*/*/*.prj src/*/*/*/*.prj)
 
+# Save default compilers, assume these are for the Host's toolchain.
 HOSTCC := $(CC)
 HOSTCXX := $(CXX)
 CC = ${TOOLCHAIN_PREFIX}gcc
@@ -23,7 +28,11 @@ AR = ${TOOLCHAIN_PREFIX}ar
 OBJDUMP = ${TOOLCHAIN_PREFIX}objdump
 OBJCOPY = ${TOOLCHAIN_PREFIX}objcopy
 
+ifeq ($(CONFIG),)
 -include config.mk
+else
+include $(CONFIG)
+endif
 
 ## Host OS and Architecture detection
 
@@ -32,7 +41,12 @@ OS := $(shell uname -s)
 endif
 
 ifeq ($(ARCH),)
+ifeq ($(OS),Windows_NT)
+# TODO: detect architecture on Windows
+ARCH := x86_64
+else
 ARCH := $(shell uname -m)
+endif
 endif
 
 ifeq ($(OS),Windows_NT)
@@ -46,7 +60,18 @@ else
 $(error Unsupported operating system $(OS))
 endif
 
+ifeq ($(OS),Windows_NT)
+# Requires "setlocal enableextensions"
+MKDIR := mkdir
+RM := del /Q
+CP := copy
+fixpath = $(subst /,\,$1)
+else
 MKDIR := mkdir -p
+RM = rm -f
+CP := cp -f
+fixpath = $1
+endif
 RMDIR := rmdir
 
 rmdir = $(if $1,$(RMDIR) $1)
@@ -60,14 +85,12 @@ EXTENSION.exe = .exe
 EXTENSION.elf = .elf
 EXTENSION.dll = .dll
 EXTENSION.lib = .a
-# EXTENSION.a = .a
 EXTENSION.bin = .bin
 else
 EXTENSION.exe =
 EXTENSION.elf = .elf
 EXTENSION.dll = .so
 EXTENSION.lib = .a
-# EXTENSION.a = .a
 EXTENSION.bin = .bin
 endif
 
@@ -81,7 +104,6 @@ CCOPTS = $(CCOPTS.gcc)
 
 ## Core Makefile
 
-TOP := $(dir $(lastword ${MAKEFILE_LIST}))
 EXTENSIONS := c cpp S
 
 .SUFFIXES:
@@ -93,7 +115,6 @@ TARGETDIR.elf := ${TOP}bin/$(TARGET_OS)-$(TARGET_ARCH)/
 TARGETDIR.dll := ${TOP}bin/$(TARGET_OS)-$(TARGET_ARCH)/
 TARGETDIR.bin := ${TOP}bin/$(TARGET_OS)-$(TARGET_ARCH)/
 TARGETDIR.lib := ${BUILDDIR}lib/
-# TARGETDIR.a := ${BUILDDIR}lib/
 
 # hack: manually add any empty directories.
 BUILD_DIRS := $(BUILDDIR) $(BUILDDIR)src/ $(BUILDDIR)src/arch/ $(TARGETDIR.lib)
@@ -102,12 +123,20 @@ all ::
 clean ::
 clean-bins :: ; $(RM) $(ALL_DEPS)
 clean-all :: clean clean-bins ; -$(call rmdir,$(wildcard $(call reverse,$(BUILD_DIRS))))
-.PHONY : all clean clean-all clean-bins distclean
+.PHONY : all clean clean-all clean-bins distclean test
 distclean : clean-all
 	-rmdir $(BUILDDIR)
 	-rmdir $(dir $(BUILDDIR))
 	-rmdir $(TARGETDIR.exe)
 	-rmdir $(dir $(TARGETDIR.exe))
+default : all
+test ::
+test-% : ; tests/test-$*.sh ${_EXEC.$*}
+
+config.mk :
+	@echo "Select a configuration from configs/ and copy into config.mk"
+	@ls -1 configs/*.mk
+	@false
 
 # build actions
 link.exe = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ $(LDFLAGS) $^ $(LDLIBS)
@@ -116,10 +145,10 @@ link.elf = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ $(LDFLAGS) $(if $(LINKERFILE),-T
 link.dll = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ -shared -Wl,-soname=$@.0 $(LDFLAGS) $^ $(LDLIBS)
 link.bin = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ $(LDFLAGS) $^ $(LDLIBS)
 link.lib = $(if $^,$(AR) $(ARFLAGS) $@ $^,$(error No files for archive))
-# link.a = $(AR) $(ARFLAGS) $@ $^
 compile.c = $(CC) -c -o $@ $(CCOPTS) $(CPPFLAGS) $(CFLAGS) $<
 compile.cpp = $(CXX) -c -o $@ $(CCOPTS) $(CPPFLAGS) $(CFLAGS) $(CXXFLAGS) $<
 compile.S = $(CC) -c -o $@ $(CPPFLAGS) $(ASFLAGS) $<
+copy = $(CP) $< $@
 
 # macros
 reverse = $(if $(1),$(call reverse,$(wordlist 2,$(words $(1)),$(1)))) $(firstword $(1))
@@ -133,7 +162,7 @@ undefine-many-os = $(call undefine-many,$1 $(addsuffix .${OS},$1) $(addsuffix .$
 # clear project config variables
 define clear-vars
 $(call undefine-many,NAME EXEC TYPE)
-$(call undefine-many-os,SRCS OBJS CFLAGS CXXFLAGS CPPFLAGS LDFLAGS LDLIBS ASFLAGS USES EXTRA INCLUDEDIR LINKERFILE)
+$(call undefine-many-os,SRCS OBJS CFLAGS CXXFLAGS CPPFLAGS LDFLAGS LDLIBS ASFLAGS USES EXTRA INCLUDEDIR LIBDIR LINKERFILE COPYFILES)
 endef
 
 define begin-project
@@ -163,25 +192,35 @@ $(eval _CPPFLAGS.${NAME} := \
 	$(addprefix -I${CURRENT_PROJECT_DIR}, \
 	${INCLUDEDIR} ${INCLUDEDIR.$(TARGET_OS)} ${INCLUDEDIR.$(TARGET_ARCH)} ${INCLUDEDIR.$(TARGET_OS).$(TARGET_ARCH)}) \
 	-I${CURRENT_PROJECT_DIR})
-_LDFLAGS.${NAME} := ${LDFLAGS} ${LDFLAGS.$(TARGET_OS)} ${LDFLAGS.$(TARGET_ARCH)} ${LDFLAGS.$(TARGET_OS).$(TARGET_ARCH)}
+$(eval _LDFLAGS.${NAME} := ${LDFLAGS} ${LDFLAGS.$(TARGET_OS)} ${LDFLAGS.$(TARGET_ARCH)} ${LDFLAGS.$(TARGET_OS).$(TARGET_ARCH)})
 $(eval _LDLIBS.${NAME} := ${LDLIBS} ${LDLIBS.$(TARGET_OS)} ${LDLIBS.$(TARGET_ARCH)} ${LDLIBS.$(TARGET_OS).$(TARGET_ARCH)})
 _ASFLAGS.${NAME} := ${ASFLAGS} ${ASFLAGS.$(TARGET_OS)} ${ASFLAGS.$(TARGET_ARCH)} ${ASFLAGS.$(TARGET_OS).$(TARGET_ARCH)}
 _LINKERFILE.${NAME} := ${LINKERFILE} ${LINKERFILE.$(TARGET_OS)} ${LINKERFILE.$(TARGET_ARCH)} ${LINKERFILE.$(TARGET_OS).$(TARGET_ARCH)}
 _OBJS.${NAME} := ${OBJS} ${OBJS.$(TARGET_OS)} ${OBJS.$(TARGET_ARCH)} ${OBJS.$(TARGET_OS).$(TARGET_ARCH)}
 _USES.${NAME} := ${USES} ${USES.$(TARGET_OS)} ${USES.$(TARGET_ARCH)} ${USES.$(TARGET_OS).$(TARGET_ARCH)}
+$(eval _COPYFILES.${NAME} := \
+	$(if ${COPYFILES}${COPYFILES.$(TARGET_OS)}${COPYFILES.$(TARGET_ARCH)}${COPYFILES.$(TARGET_OS).$(TARGET_ARCH)}, \
+	$(addprefix ${CURRENT_PROJECT_DIR}, \
+	${COPYFILES} ${COPYFILES.$(TARGET_OS)} ${COPYFILES.$(TARGET_ARCH)} ${COPYFILES.$(TARGET_OS).$(TARGET_ARCH)}), \
+	))
 ifeq ($${TYPE},lib)
 _PROVIDES_LDLIBS.${NAME} := ${_LDLIBS.${NAME}}
+_PROVIDES_LDFLAGS.${NAME} := ${_LDFLAGS.${NAME}} \
+	$(if ${LIBDIR}${LIBDIR.$(TARGET_OS)}${LIBDIR.$(TARGET_ARCH)}${LIBDIR.$(TARGET_OS).$(TARGET_ARCH)}, \
+	$(addprefix -L${CURRENT_PROJECT_DIR}, \
+	${LIBDIR} ${LIBDIR.$(TARGET_OS)} ${LIBDIR.$(TARGET_ARCH)} ${LIBDIR.$(TARGET_OS).$(TARGET_ARCH)}), \
+	)
+endif
+ifeq ($${TYPE},header)
+_PROVIDES_CPPFLAGS.${NAME} += $(_CPPFLAGS.${NAME})
+_PROVIDES_CXXFLAGS.${NAME} := $(_CXXFLAGS.${NAME})
+_PROVIDES_CFLAGS.${NAME} := $(_CFLAGS.${NAME})
 endif
 _PROVIDES_CPPFLAGS.${NAME} := \
 	$(if ${INCLUDEDIR}${INCLUDEDIR.$(TARGET_OS)}${INCLUDEDIR.$(TARGET_ARCH)}${INCLUDEDIR.$(TARGET_OS).$(TARGET_ARCH)}, \
 	$(addprefix -I${CURRENT_PROJECT_DIR}, \
 	${INCLUDEDIR} ${INCLUDEDIR.$(TARGET_OS)} ${INCLUDEDIR.$(TARGET_ARCH)} ${INCLUDEDIR.$(TARGET_OS).$(TARGET_ARCH)}), \
 	-I${CURRENT_PROJECT_DIR})
-ifeq ($${TYPE},header)
-_PROVIDES_CPPFLAGS.${NAME} += $(_CPPFLAGS.${NAME})
-_PROVIDES_CXXFLAGS.${NAME} := $(_CXXFLAGS.${NAME})
-_PROVIDES_CFLAGS.${NAME} := $(_CFLAGS.${NAME})
-endif
 $(eval _SRCS.${NAME} := $(strip $(wildcard $(addprefix ${CURRENT_PROJECT_DIR}, ${SRCS} ${SRCS.$(TARGET_OS)} ${SRCS.$(TARGET_ARCH)} ${SRCS.$(TARGET_OS).$(TARGET_ARCH)}))))
 _EXTRA.${NAME} := ${EXTRA} ${EXTRA.$(TARGET_OS)} ${EXTRA.$(TARGET_ARCH)} ${EXTRA.$(TARGET_OS).$(TARGET_ARCH)}
 $(if $(_SRCS.${NAME}),,$(error No SRCS found!))
@@ -192,11 +231,19 @@ BUILD_DIRS := $$(sort $$(BUILD_DIRS) $$(dir $$(_REAL_OBJS.${NAME})))
 CURRENT_PROJECT_DIR := # empty
 endef
 
+define copy-rule
+$(eval ${TARGETDIR.${_TYPE.$1}}$(notdir $2) :: $2 ; $$(copy))
+endef
+
 define add-target
 $(info Found ${_EXEC_BASE.$1} ... TYPE=${_TYPE.$1} $(if ${_USES.$1},USES=${_USES.$1}))
 ifneq (${_TYPE.$1},header)
 all :: ${_EXEC.$1}
-${_EXEC.$1} : ${_REAL_OBJS.$1} $(foreach u,${_USES.$1},${_EXEC.$u}) | $(dir ${_EXEC.$1}) ; $$(link.${_TYPE.$1})
+test-$1 : ${_EXEC.$1}
+test :: test-$1
+${_EXEC.$1} : ${_REAL_OBJS.$1} $(foreach u,${_USES.$1},${_EXEC.$u}) | $(dir ${_EXEC.$1}) \
+	$(foreach u,${_USES.$1},$(addprefix ${TARGETDIR.${_TYPE.$1}},$(notdir ${_COPYFILES.$u})))
+	$$(link.${_TYPE.$1})
 ${_EXEC.$1} : SRCS_CPP = ${_SRCS_cpp.$1}
 ${_EXEC.$1} : CFLAGS = ${_CFLAGS.$1} $(foreach u,${_USES.$1},${_PROVIDES_CFLAGS.$u})
 ${_EXEC.$1} : CXXFLAGS = ${_CXXFLAGS.$1} $(foreach u,${_USES.$1},${_PROVIDES_CXXFLAGS.$u})
@@ -206,7 +253,8 @@ ${_EXEC.$1} : LDLIBS = ${_LDLIBS.$1} $(foreach u,${_USES.$1},${_PROVIDES_LDLIBS.
 ${_EXEC.$1} : ASFLAGS = ${_ASFLAGS.$1}
 ${_EXEC.$1} : LINKERFILE = ${_LINKERFILE.$1}
 ${_REAL_OBJS.$1} : | $(addprefix ${_BASEDIR.$1},${_EXTRA.$1})
-clean-bins :: ; $$(RM) ${_EXEC.$1}
+$$(foreach u,${_USES.$1},$$(foreach f,$${_COPYFILES.$$u},$$(call copy-rule,$1,$$f )))
+clean-bins :: ; $$(RM) ${_EXEC.$1} $(foreach u,${_USES.$1},$(addprefix ${TARGETDIR.${_TYPE.$1}},$(notdir ${_COPYFILES.$u})))
 ifneq (${_REAL_OBJS.$1},)
 clean :: ; $$(RM) ${_REAL_OBJS.$1}
 endif
