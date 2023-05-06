@@ -44,12 +44,19 @@ Install headers and libraries, from MSYS2 shell:
 Cross compile:
 
   ```sh
-  make CONFIG=configs/mingw32_config.mk c
+  make CONFIG=configs/mingw32_config.mk
   ```
 
 ## Running
 
   * Run `./bin/Linux-aarch64/demo4` or any of the other built programs.
+
+## Status & Known Bugs
+
+Win32 support is incomplete. The following are missing or broken:
+
+  * Empty window. nothing sems to render.
+  * key event callbacks are not being called.
 
 ## Help
 
@@ -67,3 +74,4 @@ This project is licensed under the [0BSD License](LICENSE)
   * [native-activity example](https://github.com/android/ndk-samples/tree/main/native-activity)
   * [stb](https://github.com/nothings/stb)
   * [Chromium browser compiled with the Clang/LLVM compiler](https://github.com/RobRich999/Chromium_Clang)
+  * [Using OpenGL ES on windows desktops via EGL](https://www.saschawillems.de/blog/2015/04/19/using-opengl-es-on-windows-desktops-via-egl/)
