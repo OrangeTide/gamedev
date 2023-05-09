@@ -8,8 +8,8 @@ CFLAGS += -g
 INCLUDEDIRS = include
 ### Windows
 CFLAGS.Windows_NT = -mwin32 -mwindows -municode
-LDFLAGS.Windows_NT = -mwin32 -mwindows -municode
-LDLIBS.Windows_NT = -lkernel32 -luser32 -lshell32 -lopengl32 -lgdi32
+LDFLAGS.Windows_NT = -mwin32 -mwindows -municode -static-libgcc -L.
+LDLIBS.Windows_NT = -lEGL -lGLESv2
 CPPFLAGS.Windows_NT =
 ### Linux
 LDLIBS.Linux = -lm -ldl -lEGL -lGLESv2 -lX11 -lXcursor -lXi
