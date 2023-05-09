@@ -15,6 +15,10 @@
 
 /**********************************************************************/
 
+#define EGL_PLATFORM_ANGLE_ANGLE                           0x3202
+#define EGL_PLATFORM_ANGLE_TYPE_ANGLE                      0x3203
+#define EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE               0x3450
+
 #ifndef INITGL_MAX_WINDOWS
 #define INITGL_MAX_WINDOWS 4
 #endif
@@ -229,8 +233,10 @@ window_select(int num)
 	current_index = num;
 	if (info->surface && info->eglContext) {
 		eglMakeCurrent(eglDisplay, info->surface, info->surface, info->eglContext);
+		log_debug("Selected window #%d context", num);
 	} else {
 		eglMakeCurrent(eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+		log_debug("No Selected window context");
 	}
 }
 
@@ -329,6 +335,9 @@ window_new(const struct window_callback_functions *callback)
 
 	// TODO: move into display_init(). create a dummy window to initialize a display
 
+	// TODO: query extensions of eglGetDisplay(EGL_NO_DISPLAY)
+
+
 	if (eglDisplay == EGL_NO_DISPLAY) {
 		// Create EGL display connection
 		eglDisplay = eglGetDisplay(hdc);
@@ -336,6 +345,7 @@ window_new(const struct window_callback_functions *callback)
 		// Initialize EGL for this display, returns EGL version
 		EGLint major, minor;
 		eglInitialize(eglDisplay, &major, &minor);
+		eglBindAPI(EGL_OPENGL_ES_API);
 		log_debug("EGL %u.%u version: %s (%s)", major, minor,
 			eglQueryString(eglDisplay, EGL_VERSION),
 			eglQueryString(eglDisplay, EGL_VENDOR));
@@ -366,6 +376,7 @@ window_new(const struct window_callback_functions *callback)
 		EGL_MIN_SWAP_INTERVAL, EGL_DONT_CARE,
 		EGL_NATIVE_RENDERABLE, EGL_DONT_CARE,
 		EGL_NATIVE_VISUAL_TYPE, EGL_DONT_CARE,
+		// EGL_PLATFORM_ANGLE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE,
 		EGL_NONE
 	};
 
@@ -483,13 +494,13 @@ paint_all(void)
 	int old_index = current_index;
 	for (i = 0; i < INITGL_MAX_WINDOWS; i++) {
 		struct win_info *info = &window[i];
+		window_select(i);
 		if (info->alive == TRUE) {
 			if (window_select(i) == INITGL_OK) {
 				if (info->callback.paint) {
 					info->callback.paint();
 				}
 				eglSwapBuffers(eglDisplay, info->surface);
-				MessageBox(NULL, TEXT("Swapped."), TEXT("Info"), MB_OK);
 			}
 		}
 	}
