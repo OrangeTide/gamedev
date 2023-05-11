@@ -20,6 +20,8 @@ static int width = 800, height = 600;
 static LONGLONG qpcFrequency;
 static EGLDisplay eglDisplay;
 static EGLSurface eglSurface;
+static EGLContext eglContext;
+static int dirty = TRUE;
 
 static void errormsg(const char *m, ...)
 {
@@ -31,29 +33,62 @@ static void errormsg(const char *m, ...)
 	MessageBoxA(NULL, buf, "Error", MB_OK);
 }
 
+static void check_gl_error(void)
+{
+	GLenum e = glGetError();
+	if (e != GL_NO_ERROR) {
+		errormsg("GL Error 0x%04X", (unsigned)e);
+	}
+}
+
+static void check_egl_error(void)
+{
+	GLenum e = eglGetError();
+	if (e != EGL_SUCCESS) {
+		errormsg("EGL Error 0x%04X", (unsigned)e);
+	}
+}
+
+static void check_error(void)
+{
+	check_egl_error();
+	check_gl_error();
+}
+
 static void setup(void)
 {
 	printf("Initializing scene ...\n");
 //	glEnable(GL_DEPTH_TEST);
-	glClearColor(0.1f, 0.9f, 0.9f, 1.0f);
+	glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
 }
 
 static void paint(double timeFactor)
 {
 	(void)timeFactor;
 
+	printf("Painting ...\n");
 	glViewport(0, 0, width, height);
 //	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	// glDrawArrays(GL_TRIANGLE_STRIP, 0, 26);
 
-	glFlush();
+	// glFlush();
 }
 
 LRESULT CALLBACK wndProc(HWND hwnd, unsigned int msg, WPARAM wParam, LPARAM lParam)
 {
+
 	switch (msg) {
+#if 0
+	PAINTSTRUCT ps;
+
+	case WM_PAINT:
+		BeginPaint(hwnd, &ps);
+		EndPaint(hwnd, &ps);
+		return 0;
+#endif
+
 	case WM_CLOSE :
 		quit = TRUE;
 		DestroyWindow(hwnd);
@@ -63,9 +98,9 @@ LRESULT CALLBACK wndProc(HWND hwnd, unsigned int msg, WPARAM wParam, LPARAM lPar
 	case WM_SIZE:
 		width = LOWORD(lParam);
 		height = HIWORD(lParam);
+		printf("WM_SIZE\n");
 		return 0;
 	}
-
 	return (DefWindowProc(hwnd, msg, wParam, lParam));
 }
 
@@ -73,32 +108,32 @@ static int newwin(void)
 {
 	HINSTANCE hInstance = GetModuleHandle(NULL);
 
-	WNDCLASSEX wcex;
-	wcex.cbSize = sizeof(WNDCLASSEX);
-	wcex.style = CS_OWNDC;
-	wcex.lpfnWndProc = &DefWindowProc;
-	wcex.cbClsExtra = 0;
-	wcex.cbWndExtra = 0;
-	wcex.hInstance = hInstance;
-	wcex.hIcon = NULL;
-	wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
-	wcex.hbrBackground = 0;
-	wcex.lpszMenuName = NULL;
-	wcex.lpszClassName = L"eglsamplewnd";
-	wcex.hIconSm = NULL;
-	wcex.lpfnWndProc = wndProc;
+	WNDCLASSEX wcex = {
+		.cbSize = sizeof(WNDCLASSEX),
+		.style = CS_OWNDC,
+		.cbClsExtra = 0,
+		.cbWndExtra = 0,
+		.hInstance = hInstance,
+		.hIcon = NULL,
+		.hCursor = LoadCursor(NULL, IDC_ARROW),
+		.hbrBackground = 0,
+		.lpszMenuName = NULL,
+		.lpszClassName = L"eglsamplewnd",
+		.hIconSm = NULL,
+		.lpfnWndProc = wndProc,
+	};
 
 	RegisterClassEx(&wcex);
 	RECT rect = { 0, 0, width, height };
 	int style = WS_BORDER | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME;
 	AdjustWindowRect(&rect, style, FALSE);
 
-	HWND hwnd = CreateWindow(L"eglsamplewnd", L"EGL OpenGL ES 2.0 example", style, CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top, NULL, NULL, hInstance, NULL);
+	HWND hwnd = CreateWindow(L"eglsamplewnd", L"Tiny EGL example", style, CW_USEDEFAULT, CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top, NULL, NULL, hInstance, NULL);
 
 	ShowWindow(hwnd, SW_SHOW);
 
 	HDC hdc = GetDC(hwnd);
-	EGLDisplay eglDisplay = eglGetDisplay(hdc);
+	eglDisplay = eglGetDisplay(hdc);
 	if (eglDisplay == EGL_NO_DISPLAY) {
 		errormsg("No EGL display");
 		return ERR;
@@ -146,24 +181,60 @@ static int newwin(void)
 		return ERR;
 	}
 
-	EGLSurface eglSurface = eglCreateWindowSurface(eglDisplay, windowConfig, hwnd, surfaceAttributes);
+	eglSurface = eglCreateWindowSurface(eglDisplay, windowConfig, hwnd, surfaceAttributes);
 	if (!nrOfConfigs || eglSurface == EGL_NO_SURFACE) {
 		errormsg("Could not create EGL surface");
 		// TODO: tear down eglDisplay and hwnd
 		return ERR;
 	}
 
-	EGLContext eglContext = eglCreateContext(eglDisplay, windowConfig, NULL, contextAttributes);
-
+	eglContext = eglCreateContext(eglDisplay, windowConfig, NULL, contextAttributes);
 	if (eglContext == EGL_NO_CONTEXT) {
 		errormsg("Could not create EGL context");
 		// TODO: tear down eglSurface, eglDisplay and hwnd
 		return ERR;
 	}
 
-	eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
+	check_egl_error();
 
-	setup();
+	printf("EGL_VERSION=%s\n", eglQueryString(eglDisplay, EGL_VERSION));
+	printf("EGL_VENDOR=%s\n", eglQueryString(eglDisplay, EGL_VENDOR));
+	printf("EGL_CLIENT_APIS=%s\n", eglQueryString(eglDisplay, EGL_CLIENT_APIS));
+	printf("EGL_EXTENSIONS=%s\n", eglQueryString(eglDisplay, EGL_EXTENSIONS));
+
+#if 0 // HACK
+
+	int eglNumConfigs;
+	eglGetConfigs(eglDisplay, NULL, 0, &eglNumConfigs);
+	EGLConfig eglConfigs[eglNumConfigs];
+
+	for (int i = 0; i < eglNumConfigs; i++) {
+		printf("Config %d\n", i);
+		printf("Supported APIs :");
+		int eglRenderable;
+		eglGetConfigAttrib(eglDisplay, eglConfigs[i], EGL_RENDERABLE_TYPE, &eglRenderable);
+		if (eglRenderable & EGL_OPENGL_ES_BIT) printf(" OPENGL ES");
+		if (eglRenderable & EGL_OPENGL_ES2_BIT) printf(" OPENGL ES2");
+		if (eglRenderable & EGL_OPENVG_BIT) printf(" OPENVG");
+		if (eglRenderable & EGL_OPENGL_BIT) printf(" OPENGL");
+		printf("\n");
+	}
+
+	EGLint attr[] = {
+		EGL_BUFFER_SIZE, 16,
+		EGL_RENDERABLE_TYPE,
+		EGL_OPENGL_ES2_BIT,
+		EGL_NONE
+	};
+
+	EGLConfig eglConfig;
+	int eglNumConfig;
+	if (!eglChooseConfig(eglDisplay, attr, &eglConfig, sizeof(eglConfig), &eglNumConfig)) {
+		errormsg("Could not get valid EGL configuration!");
+		return ERR;
+	}
+
+#endif
 
 	return OK;
 }
@@ -176,6 +247,18 @@ static int init(void)
 		return ERR;
 	}
 
+	eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext);
+
+	printf("GL_VENDOR: %s\n", glGetString(GL_VENDOR));
+	printf("GL_RENDERER: %s\n", glGetString(GL_RENDERER));
+	printf("GL_VERSION: %s\n", glGetString(GL_VERSION));
+	printf("GL_SHADING_LANGUAGE_VERSION: %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
+
+	setup();
+
+	check_error();
+
+
 	return OK;
 }
 
@@ -184,36 +267,29 @@ static void loop(void)
 	double timeFactor = 1.0f;
 	MSG uMsg;
 
-#if 0
-	if (PeekMessage(&uMsg, NULL, 0, 0, PM_REMOVE) > 0) {
-		TranslateMessage(&uMsg);
-		DispatchMessage(&uMsg);
-	}
-#endif
-
 	LONGLONG qpcStart, qpcEnd;
 
 	while (!quit)  {
 		QueryPerformanceCounter((LARGE_INTEGER*)&qpcStart);
 
-		printf("Painting...\n");
+		if (dirty) {
+			while (PeekMessage(&uMsg, NULL, 0, 0, PM_REMOVE) > 0) {
+				printf("MSG %d\n", uMsg.message);
+				TranslateMessage(&uMsg);
+				DispatchMessage(&uMsg);
+			}
+		} else {
+			while (GetMessage(&uMsg, NULL, 0, 0)) {
+				printf("MSG %d\n", uMsg.message);
+				TranslateMessage(&uMsg);
+				DispatchMessage(&uMsg);
+			}
+		}
+
+		dirty = FALSE;
 		paint(timeFactor);
-
-#if 0
-		while (PeekMessage(&uMsg, NULL, 0, 0, PM_REMOVE) > 0) {
-			printf("MSG %d\n", uMsg.message);
-			TranslateMessage(&uMsg);
-			DispatchMessage(&uMsg);
-		}
-#else
-		while (GetMessage(&uMsg, NULL, 0, 0)) {
-			printf("MSG %d\n", uMsg.message);
-			TranslateMessage(&uMsg);
-			DispatchMessage(&uMsg);
-		}
-#endif
-
 		eglSwapBuffers(eglDisplay, eglSurface);
+		check_error();
 
 		QueryPerformanceCounter((LARGE_INTEGER*)&qpcEnd);
 		double dTime = (double)(qpcEnd - qpcStart) / (double)qpcFrequency;
