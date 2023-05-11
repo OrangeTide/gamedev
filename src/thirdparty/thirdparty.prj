@@ -1,0 +1,5 @@
+$(BEGIN_TARGET)
+NAME = thirdparty
+TYPE = header
+SRCS = *.h
+$(END_TARGET)
