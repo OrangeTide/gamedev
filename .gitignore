@@ -2,6 +2,7 @@
 /bin
 .vscode
 .*.swp
+*~
 
 /src/initgl/include/EGL/
 /src/initgl/include/GLES2/

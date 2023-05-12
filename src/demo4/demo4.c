@@ -1,4 +1,5 @@
 #include "initgl.h"
+#include "gamepad.h"
 #include "log.h"
 #include <assert.h>
 #include <stdlib.h>
@@ -491,7 +492,9 @@ main()
 	if (window_new(&callbacks) != INITGL_OK) {
 		return 1;
 	}
+
 	my_key_init();
+	gamepad_init();
 
 	if (my_gl_init() != OK) {
 		return 1;
@@ -499,11 +502,13 @@ main()
 
 	while (!terminate_flag) {
 		process_events();
+		gamepad_poll();
 		animate();
 		paint_all();
 	}
 
 	my_gl_done();
+	gamepad_done();
 	display_done();
 
 	return 0;
