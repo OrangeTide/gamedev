@@ -1,6 +1,7 @@
 #include "gamepad.h"
 #include "gamepad-windows.h"
 #include <windows.h>
+#include <xinput.h>
 #include <stdlib.h>
 
 static DWORD gamepad_packetnumber[GAMEPAD_MAX]; /* cache of XINPUT_STATE.dwPacketNumber */
@@ -33,7 +34,7 @@ gamepad_open_one(int id)
 	struct gamepad_state *gs = &gamepad_state[id];
 
 	memset(gs, 0, sizeof(*gs));
-	info->num_buttons = 14; /* XBox 360 controller */
+	info->num_button = 14; /* XBox 360 controller */
 
 	// TODO: implement this
 

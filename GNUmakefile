@@ -60,17 +60,18 @@ else
 $(error Unsupported operating system $(OS))
 endif
 
-ifeq ($(OS),Windows_NT)
+ifeq ($(findstring sh,$(SHELL)),sh)
+# detect a unix style shell
+MKDIR := mkdir -p
+RM = rm -f
+CP := cp -f
+fixpath = $1
+else
 # Requires "setlocal enableextensions"
 MKDIR := mkdir
 RM := del /Q
 CP := copy
 fixpath = $(subst /,\,$1)
-else
-MKDIR := mkdir -p
-RM = rm -f
-CP := cp -f
-fixpath = $1
 endif
 RMDIR := rmdir
 
@@ -263,6 +264,7 @@ endef
 
 # Create missing directories
 %/ : ; @echo Creating $@ ; $(MKDIR) $@
+
 .PRECIOUS : %/
 
 # generate rules

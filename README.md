@@ -11,10 +11,13 @@ Collection of my studies in game development.
 ### Dependencies
 
   * Linux x86-64/ARM64 or Windows x86-64
-  * GCC or MSYS2/[MinGW-w64](https://www.mingw-w64.org/)
+  * GCC or MSYS2/[MinGW-w64](https://www.mingw-w64.org/) or equivalent
   * cmake 2.8 or newer
-  * GNU Make (optional)
-  * ANGLE libaries (if building on Windows) - see `update-binaries.sh`
+  * GNU Make
+  * If building on Windows:
+    * MinGW-w64 or [w64devkit](https://github.com/skeeto/w64devkit)
+    * ANGLE libaries - see `update-binaries.sh`
+    * [DirectX End-User Runtime Web Installer](https://answers.microsoft.com/en-us/windows/forum/all/xinput13dll-is-missing/b6566b88-b8dd-4dd3-abc5-2efac787a93a)
 
 #### Ubuntu 22.04 x86-64 / Raspbian (64-bit aarch64)
 

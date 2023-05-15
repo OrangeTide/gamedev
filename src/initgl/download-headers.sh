@@ -1,24 +1,22 @@
 #!/bin/sh
 set -e
 
-HEADERS=(
-# OpenGL ES 2.0
-"https://registry.khronos.org/OpenGL/api/GLES2/gl2.h"
-"https://registry.khronos.org/OpenGL/api/GLES2/gl2ext.h"
-"https://registry.khronos.org/OpenGL/api/GLES2/gl2platform.h"
-# OpenGL ES 3.0, 3.1, and 3.2
-"https://registry.khronos.org/OpenGL/api/GLES3/gl32.h"
-"https://registry.khronos.org/OpenGL/api/GLES3/gl31.h"
-"https://registry.khronos.org/OpenGL/api/GLES3/gl3.h"
-"https://registry.khronos.org/OpenGL/api/GLES3/gl3platform.h"
-# Khronos EGL
-"https://registry.khronos.org/EGL/api/EGL/egl.h"
-"https://registry.khronos.org/EGL/api/EGL/eglext.h"
-"https://registry.khronos.org/EGL/api/EGL/eglplatform.h"
+# POSIX shell trick for making an array
+# OpenGL ES 2.0, OpenGL ES 3.0, 3.1, and 3.2, Khronos EGL
+set -- \
+"https://registry.khronos.org/OpenGL/api/GLES2/gl2.h" \
+"https://registry.khronos.org/OpenGL/api/GLES2/gl2ext.h" \
+"https://registry.khronos.org/OpenGL/api/GLES2/gl2platform.h" \
+"https://registry.khronos.org/OpenGL/api/GLES3/gl32.h" \
+"https://registry.khronos.org/OpenGL/api/GLES3/gl31.h" \
+"https://registry.khronos.org/OpenGL/api/GLES3/gl3.h" \
+"https://registry.khronos.org/OpenGL/api/GLES3/gl3platform.h" \
+"https://registry.khronos.org/EGL/api/EGL/egl.h" \
+"https://registry.khronos.org/EGL/api/EGL/eglext.h" \
+"https://registry.khronos.org/EGL/api/EGL/eglplatform.h" \
 "https://registry.khronos.org/EGL/api/KHR/khrplatform.h"
-)
 
-for url in "${HEADERS[@]}" ; do
+for url in "$@" ; do
   B="${url##*://*/api/}"
   if [ ! -e "include/$B" ]; then
     echo "Downloading $url ..."
@@ -28,7 +26,7 @@ for url in "${HEADERS[@]}" ; do
   fi
 done
 
-cat <<EOF | sha1sum --check
+cat <<EOF | sha1sum -c
 108a22ccb13ea471940804584e01fbefa78a4872  include/EGL/eglext.h
 30b8964110af967b8ca07ef4530f56a88d849c21  include/EGL/egl.h
 60963b845b8d7570520c853f5e0a36a645fd3cbc  include/EGL/eglplatform.h
