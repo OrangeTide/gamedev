@@ -21,16 +21,20 @@ static GLint unif_color;
 static GLint unif_palette;
 static GLint unif_texture;
 
-struct demo4_state {
-	unsigned tick;
+struct screen {
 	GLuint program;
 	GLuint buf;
 	GLuint palette_tex;
 	GLuint palette_buf[256];
-	GLubyte *screen_buf;
-	GLuint screen_tex;
-	GLsizei screen_width;
-	GLsizei screen_height;
+	GLubyte *data;
+	GLuint tex;
+	GLsizei width;
+	GLsizei height;
+};
+
+struct demo4_state {
+	unsigned tick;
+	struct screen screen;
 } state;
 
 /**********************************************************************/
@@ -247,34 +251,40 @@ screen_update(unsigned left, unsigned top, unsigned right, unsigned bottom)
 	GLsizei height = bottom - top + 1;
 
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, state.screen_tex);
+	glBindTexture(GL_TEXTURE_2D, state.screen.tex);
 	// glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	// glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 #ifdef USE_GLES2 // GLES 2
-	glTexSubImage2D(GL_TEXTURE_2D, 0, left, top, width, height, GL_LUMINANCE, GL_UNSIGNED_BYTE, state.screen_buf);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, left, top, width, height, GL_LUMINANCE, GL_UNSIGNED_BYTE, state.screen.data);
 #else // OpenGL 3+
 	// TODO: untested code path!
 	const GLint one_byte_swizzle[] = { GL_RED, GL_RED, GL_RED, GL_ONE };
 	glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, one_byte_swizzle);
-	glTexSubImage2D(GL_TEXTURE_2D, 0, left, top, width, height, GL_RED, GL_UNSIGNED_BYTE, state.screen_buf);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, left, top, width, height, GL_RED, GL_UNSIGNED_BYTE, state.screen.data);
 #endif
 	return OK;
+}
+
+static void
+screen_update_full(void)
+{
+	screen_update(0, 0, state.screen.width - 1, state.screen.height - 1);
 }
 
 static int
 screen_init(int screen_width, int screen_height)
 {
-	state.screen_width = screen_width;
-	state.screen_height = screen_height;
-	state.screen_buf = malloc(screen_width * screen_height);
-	if (!state.screen_buf) {
+	state.screen.width = screen_width;
+	state.screen.height = screen_height;
+	state.screen.data = malloc(screen_width * screen_height);
+	if (!state.screen.data) {
 		return ERR;
 	}
 
-	memset(state.screen_buf, 0, screen_width * screen_height);
+	memset(state.screen.data, 0, screen_width * screen_height);
 
 	return OK;
 }
@@ -309,33 +319,33 @@ my_gl_init(void)
 		"}\n"
 	};
 
-	if (compile_shader(&state.program, vert_source, frag_source) != OK) {
+	if (compile_shader(&state.screen.program, vert_source, frag_source) != OK) {
 		return ERR;
 	}
-	assert(state.program != 0);
+	assert(state.screen.program != 0);
 
 	initgl_gl_check();
 
-	load_attributes(state.program);
+	load_attributes(state.screen.program);
 
 	initgl_gl_check();
 
-	glUseProgram(state.program);
+	glUseProgram(state.screen.program);
 
 	initgl_gl_check();
 
 	screen_init(320, 240);
 
 	/* attr_vertex, etc. must be set before calling this */
-	load_buffer(&state.buf, &state.screen_tex, state.screen_width,
-		    state.screen_height, &state.palette_tex);
+	load_buffer(&state.screen.buf, &state.screen.tex, state.screen.width,
+		    state.screen.height, &state.screen.palette_tex);
 
 	// TODO: place this in load_palette()
-	palette_init(state.palette_buf);
-	glBindTexture(GL_TEXTURE_2D, state.palette_tex);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, state.palette_buf);
+	palette_init(state.screen.palette_buf);
+	glBindTexture(GL_TEXTURE_2D, state.screen.palette_tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, state.screen.palette_buf);
 
-	screen_update(0, 0, state.screen_width - 1, state.screen_height -1);
+	screen_update_full();
 
 	initgl_gl_check();
 
@@ -345,16 +355,16 @@ my_gl_init(void)
 static void
 my_gl_done(void)
 {
-	if (state.program) {
+	if (state.screen.program) {
 		glUseProgram(0);
-		glDeleteProgram(state.program);
-		state.program = 0;
+		glDeleteProgram(state.screen.program);
+		state.screen.program = 0;
 	}
 
-	if (state.buf) {
+	if (state.screen.buf) {
 		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		glDeleteBuffers(1, &state.buf);
-		state.buf = 0;
+		glDeleteBuffers(1, &state.screen.buf);
+		state.screen.buf = 0;
 	}
 }
 
@@ -373,14 +383,14 @@ my_key_init(void)
 static void
 screen_paint(void)
 {
-	glBindBuffer(GL_ARRAY_BUFFER, state.buf);
-	glUseProgram(state.program);
+	glBindBuffer(GL_ARRAY_BUFFER, state.screen.buf);
+	glUseProgram(state.screen.program);
 
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, state.screen_tex);
+	glBindTexture(GL_TEXTURE_2D, state.screen.tex);
 
 	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, state.palette_tex);
+	glBindTexture(GL_TEXTURE_2D, state.screen.palette_tex);
 
 	if (unif_color >= 0) {
 		glUniform4f(unif_color, 0.5, 0.5, 0.8, 1.0);
@@ -468,19 +478,19 @@ animate(void)
 	unsigned tick = state.tick++;
 
 	GLsizei x, y;
-	unsigned row_bytes = state.screen_width;
-	GLubyte *screen_buf = state.screen_buf;
+	unsigned row_bytes = state.screen.width;
+	GLubyte *screen_data = state.screen.data;
 
-	if (!screen_buf) { return; }
+	if (!screen_data) { return; }
 
-	for (y = 0; y < state.screen_height; y++) {
-		GLubyte *row = state.screen_buf + y * row_bytes;
-		for (x = 0; x < state.screen_width; x++) {
+	for (y = 0; y < state.screen.height; y++) {
+		GLubyte *row = state.screen.data + y * row_bytes;
+		for (x = 0; x < state.screen.width; x++) {
 			row[x] = ((x + (y ^ 12) + tick) % 16) + 232;
 		}
 	}
 
-	screen_update(0, 0, state.screen_width - 1, state.screen_height -1);
+	screen_update_full();
 }
 
 int
