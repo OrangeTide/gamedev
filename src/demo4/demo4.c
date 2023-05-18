@@ -15,14 +15,17 @@
 
 static int up_key, down_key, left_key, right_key, fire_key;
 
-static GLint attr_vertex;
-static GLint attr_multitexcoord0;
-static GLint unif_color;
-static GLint unif_palette;
-static GLint unif_texture;
+struct shader_info {
+	GLuint program;
+	GLint attr_vertex;
+	GLint attr_multitexcoord0;
+	GLint unif_color;
+	GLint unif_palette;
+	GLint unif_texture;
+};
 
 struct screen {
-	GLuint program;
+	struct shader_info shader;
 	GLuint buf;
 	GLuint palette_tex;
 	GLuint palette_buf[256];
@@ -106,32 +109,39 @@ compile_shader(GLuint *program_out, const GLchar *vert_source, const GLchar *fra
 }
 
 static int
-load_attributes(GLuint program)
+load_attributes(GLuint program, const char **attr_names, GLint *attr_out, unsigned count)
 {
-	attr_vertex = glGetAttribLocation(program, "vertex");
-	attr_multitexcoord0 = glGetAttribLocation(program, "AttrMultiTexCoord0");
-	unif_color = glGetUniformLocation(program, "color");
-	unif_palette = glGetUniformLocation(program, "palette");
-	unif_texture = glGetUniformLocation(program, "texture");
+	int result = OK;
+	unsigned i;
+	for (i = 0; i < count; i++) {
+		GLint attr = glGetAttribLocation(program, attr_names[i]);
+		if (attr < 0) {
+			log_error("no %s attribute", attr_names[i]);
+			result = ERR;
+		}
 
-	if (attr_vertex < 0) {
-		log_error("no vertex attribute");
-		return ERR;
+		attr_out[i] = attr;
 	}
 
-	if (unif_color < 0) {
-		log_error("WARN:no color uniform");
+	return result;
+}
+
+static int
+load_uniforms(GLuint program, const char **unif_names, GLint *unif_out, unsigned count)
+{
+	int result = OK;
+	unsigned i;
+	for (i = 0; i < count; i++) {
+		GLint unif = glGetUniformLocation(program, unif_names[i]);
+		if (unif < 0) {
+			log_error("no %s uniform", unif_names[i]);
+			result = ERR;
+		}
+
+		unif_out[i] = unif;
 	}
 
-	if (unif_palette < 0) {
-		log_error("WARN:no palette uniform");
-	}
-
-	if (unif_texture < 0) {
-		log_error("WARN:no screen texture uniform");
-	}
-
-	return OK;
+	return result;
 }
 
 static int
@@ -155,8 +165,8 @@ load_buffer(GLuint *buf_out, GLuint *screen_tex_out, int screen_width, int scree
 	glGenBuffers(1, &buf);
 	glBindBuffer(GL_ARRAY_BUFFER, buf);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(vertex_data), vertex_data, GL_STATIC_DRAW);
-	glVertexAttribPointer(attr_vertex, 4, GL_FLOAT, 0, 16, 0);
-	glEnableVertexAttribArray(attr_vertex);
+	glVertexAttribPointer(state.screen.shader.attr_vertex, 4, GL_FLOAT, 0, 16, 0);
+	glEnableVertexAttribArray(state.screen.shader.attr_vertex);
 	*buf_out = buf;
 
 	initgl_gl_check();
@@ -319,18 +329,19 @@ my_gl_init(void)
 		"}\n"
 	};
 
-	if (compile_shader(&state.screen.program, vert_source, frag_source) != OK) {
+	if (compile_shader(&state.screen.shader.program, vert_source, frag_source) != OK) {
 		return ERR;
 	}
-	assert(state.screen.program != 0);
+	assert(state.screen.shader.program != 0);
 
 	initgl_gl_check();
 
-	load_attributes(state.screen.program);
+	load_attributes(state.screen.shader.program, (const char*[]){ "vertex", "AttrMultiTexCoord0" }, &state.screen.shader.attr_vertex, 2);
+	load_uniforms(state.screen.shader.program, (const char*[]){ "color", "palette", "texture" }, &state.screen.shader.unif_color, 3);
 
 	initgl_gl_check();
 
-	glUseProgram(state.screen.program);
+	glUseProgram(state.screen.shader.program);
 
 	initgl_gl_check();
 
@@ -355,10 +366,10 @@ my_gl_init(void)
 static void
 my_gl_done(void)
 {
-	if (state.screen.program) {
+	if (state.screen.shader.program) {
 		glUseProgram(0);
-		glDeleteProgram(state.screen.program);
-		state.screen.program = 0;
+		glDeleteProgram(state.screen.shader.program);
+		state.screen.shader.program = 0;
 	}
 
 	if (state.screen.buf) {
@@ -384,7 +395,7 @@ static void
 screen_paint(void)
 {
 	glBindBuffer(GL_ARRAY_BUFFER, state.screen.buf);
-	glUseProgram(state.screen.program);
+	glUseProgram(state.screen.shader.program);
 
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, state.screen.tex);
@@ -392,14 +403,14 @@ screen_paint(void)
 	glActiveTexture(GL_TEXTURE1);
 	glBindTexture(GL_TEXTURE_2D, state.screen.palette_tex);
 
-	if (unif_color >= 0) {
-		glUniform4f(unif_color, 0.5, 0.5, 0.8, 1.0);
+	if (state.screen.shader.unif_color >= 0) {
+		glUniform4f(state.screen.shader.unif_color, 0.5, 0.5, 0.8, 1.0);
 	}
-	if (unif_palette >= 0) {
-		glUniform1i(unif_palette, 1); // palette_tex is GL_TEXTURE1
+	if (state.screen.shader.unif_palette >= 0) {
+		glUniform1i(state.screen.shader.unif_palette, 1); // palette_tex is GL_TEXTURE1
 	}
-	if (unif_texture >= 0) {
-		glUniform1i(unif_texture, 0); // screen_tex is GL_TEXTURE0
+	if (state.screen.shader.unif_texture >= 0) {
+		glUniform1i(state.screen.shader.unif_texture, 0); // screen_tex is GL_TEXTURE0
 	}
 
 	initgl_gl_check();
