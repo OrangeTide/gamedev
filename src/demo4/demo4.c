@@ -22,6 +22,7 @@ struct shader_info {
 	GLint unif_color;
 	GLint unif_palette;
 	GLint unif_texture;
+	GLint unif_scale;
 };
 
 struct screen {
@@ -35,9 +36,24 @@ struct screen {
 	GLsizei height;
 };
 
+struct sprite_instance {
+	GLfloat x, y;
+};
+
+struct sprite_group {
+	struct shader_info shader;
+	GLuint quad_buf;
+	unsigned count;
+	// TODO: GLuint tex;
+	// TODO: GLsizei width;
+	// TODO: GLsizei height;
+	struct sprite_instance *instance;
+};
+
 struct demo4_state {
 	unsigned tick;
 	struct screen screen;
+	struct sprite_group sprite_group;
 } state;
 
 /**********************************************************************/
@@ -211,6 +227,7 @@ screen_update(struct screen *screen, unsigned left, unsigned top, unsigned right
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+	assert(screen->data != NULL);
 #ifdef USE_GLES2 // GLES 2
 	glTexSubImage2D(GL_TEXTURE_2D, 0, left, top, width, height, GL_LUMINANCE, GL_UNSIGNED_BYTE, screen->data);
 #else // OpenGL 3+
@@ -219,6 +236,8 @@ screen_update(struct screen *screen, unsigned left, unsigned top, unsigned right
 	glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, one_byte_swizzle);
 	glTexSubImage2D(GL_TEXTURE_2D, 0, left, top, width, height, GL_RED, GL_UNSIGNED_BYTE, screen->data);
 #endif
+	initgl_gl_check();
+
 	return OK;
 }
 
@@ -249,7 +268,7 @@ screen_init(struct screen *screen, int screen_width, int screen_height)
 {
 	/* vertex shader source */
 	const GLchar vert_source[] = {
-		"#version 100 // GLESv1\n"
+		"#version 100\n" // GLSL ES 1.00
 		"precision mediump float;\n"
 		"attribute vec4 vertex;\n"
 		// "attribute vec4 AttrMultiTexCoord0;\n"
@@ -262,7 +281,7 @@ screen_init(struct screen *screen, int screen_width, int screen_height)
 	};
 	/* fragment shader source */
 	const GLchar frag_source[] = {
-		"#version 100 // GLESv1\n"
+		"#version 100\n" // GLSL ES 1.00
 		"precision mediump float;\n"
 		"uniform sampler2D texture;\n"
 		"uniform sampler2D palette;\n"
@@ -274,6 +293,7 @@ screen_init(struct screen *screen, int screen_width, int screen_height)
 	};
 
 	if (compile_shader(&screen->shader.program, vert_source, frag_source) != OK) {
+		log_error("GL shader compile failure");
 		return ERR;
 	}
 	assert(screen->shader.program != 0);
@@ -281,6 +301,10 @@ screen_init(struct screen *screen, int screen_width, int screen_height)
 	initgl_gl_check();
 
 	load_attributes(screen->shader.program, (const char*[]){ "vertex", "AttrMultiTexCoord0" }, &screen->shader.attr_vertex, 2);
+	if (screen->shader.attr_vertex < 0) {
+		log_error("GL shader missing vertex attribute");
+		return ERR;
+	}
 	load_uniforms(screen->shader.program, (const char*[]){ "color", "palette", "texture" }, &screen->shader.unif_color, 3);
 
 	initgl_gl_check();
@@ -293,6 +317,7 @@ screen_init(struct screen *screen, int screen_width, int screen_height)
 	screen->height = screen_height;
 	screen->data = malloc(screen_width * screen_height);
 	if (!screen->data) {
+		log_error("Unable to allocate screen data:%s", strerror(errno));
 		return ERR;
 	}
 
@@ -347,6 +372,8 @@ screen_init(struct screen *screen, int screen_width, int screen_height)
 	// TODO: share this in palette_update()
 	glBindTexture(GL_TEXTURE_2D, screen->palette_tex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, screen->palette_buf);
+
+	initgl_gl_check();
 
 	return OK;
 }
@@ -404,34 +431,137 @@ sprite_group_init(struct sprite_group *group, unsigned count)
 	for (i = 0; i < count; i++) {
 		struct sprite_instance *sprite = group->instance + i;
 
+		// initialize each sprite
 		*sprite = (struct sprite_instance){};
-
-		// TODO: initialize each sprite
 	}
 
+	/* vertex shader source */
+	const GLchar vert_source[] = {
+		"#version 100\n" // GLSL ES 1.00
+		"precision mediump float;\n"
+		"attribute vec4 vertex;\n"
+		"uniform vec2 scale;\n"
+		"void main(void) {\n"
+		"  gl_Position = vertex * vec4(scale, 0.0, 1.0);\n"
+		"}\n"
+	};
+	/* fragment shader source */
+	const GLchar frag_source[] = {
+		"#version 100\n" // GLSL ES 1.00
+		"precision mediump float;\n"
+		"void main(void) {\n"
+		"  gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);\n"
+		"}\n"
+	};
+
+	if (compile_shader(&group->shader.program, vert_source, frag_source) != OK) {
+		return ERR;
+	}
+	assert(group->shader.program != 0);
+
+	initgl_gl_check();
+
+	load_attributes(group->shader.program, (const char*[]){ "vertex", }, &group->shader.attr_vertex, 1);
+	if (group->shader.attr_vertex < 0) {
+		log_error("GL shader missing vertex attribute");
+		return ERR;
+	}
+
+	load_uniforms(group->shader.program, (const char*[]){ "scale" }, &group->shader.unif_scale, 1);
+
+	initgl_gl_check();
+
+	glUseProgram(group->shader.program);
+
+	initgl_gl_check();
+
+	/*** Vertex Buffer ***/
+
+	static const GLfloat quad_data[] = {
+		-1.0, -1.0, 1.0, 1.0,
+		1.0, -1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0,
+		-1.0, 1.0, 1.0, 1.0
+	};
+
+	GLuint quad_buf = 0;
+	glGenBuffers(1, &quad_buf);
+	glBindBuffer(GL_ARRAY_BUFFER, quad_buf);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(quad_data), quad_data, GL_STATIC_DRAW);
+	glVertexAttribPointer(group->shader.attr_vertex, 4, GL_FLOAT, 0, 16, 0);
+	glEnableVertexAttribArray(group->shader.attr_vertex);
+	group->quad_buf = quad_buf;
+
+	initgl_gl_check();
+
+	/*** Textures ***/
+
+	// TODO: implement a sprite sheet texture
+
+	return OK;
 	return OK;
 }
 
 static void
-sprite_group_paint(struct sprite_group *sprite)
+sprite_group_paint(struct sprite_group *group)
 {
-	unsigned count = sprite->count;
+	unsigned count = group->count;
 	unsigned i;
 
-	for (i = 0; i < count; i++) {
-		struct sprite_instance *sprite = group->instance + i;
+	glBindBuffer(GL_ARRAY_BUFFER, group->quad_buf);
+	glUseProgram(group->shader.program);
 
-		// TODO: dispatch draw calls for sprites
+#if 0 // TODO: implement sprite sheet texture
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, group->tex);
+
+	if (screen->shader.unif_texture >= 0) {
+		glUniform1i(screen->shader.unif_texture, 0); // screen_tex is GL_TEXTURE0
 	}
+#endif
+	if (group->shader.unif_scale >= 0) {
+		glUniform2f(group->shader.unif_scale, 16.0 / 320, 16.0 / 240);
+	}
+
+	// dispatch draw calls for sprites
+
+	for (i = 0; i < count; i++) {
+		// struct sprite_instance *sprite = group->instance + i;
+
+		initgl_gl_check();
+
+		// TODO: apply instance and coordinate information
+
+		glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+	}
+
+	initgl_gl_check();
+
+	/* clean up state */
+
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, 0);
+
+	initgl_gl_check();
 }
 
 /* load shader, initialize GL state */
 static int
 my_gl_init(void)
 {
-	screen_init(&state.screen, 320, 240);
+	if (screen_init(&state.screen, 320, 240) != OK) {
+		log_error("screen init failed");
+		return ERR;
+	}
 
 	screen_update_full(&state.screen);
+
+	initgl_gl_check();
 
 	sprite_group_init(&state.sprite_group, 1);
 
@@ -464,7 +594,9 @@ paint(void)
 	glClearColor(1.0, 1.0, 0.0, 1.0);
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	screen_paint();
+	screen_paint(&state.screen);
+
+	sprite_group_paint(&state.sprite_group);
 
 	glFlush();
 
@@ -517,19 +649,19 @@ animate(void)
 	unsigned tick = state.tick++;
 
 	GLsizei x, y;
-	unsigned row_bytes = screen->width;
-	GLubyte *screen_data = screen->data;
+	unsigned row_bytes = state.screen.width;
+	GLubyte *screen_data = state.screen.data;
 
 	if (!screen_data) { return; }
 
-	for (y = 0; y < screen->height; y++) {
-		GLubyte *row = screen->data + y * row_bytes;
-		for (x = 0; x < screen->width; x++) {
+	for (y = 0; y < state.screen.height; y++) {
+		GLubyte *row = state.screen.data + y * row_bytes;
+		for (x = 0; x < state.screen.width; x++) {
 			row[x] = ((x + (y ^ 12) + tick) % 16) + 232;
 		}
 	}
 
-	screen_update_full();
+	screen_update_full(&state.screen);
 }
 
 int
