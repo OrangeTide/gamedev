@@ -199,37 +199,53 @@ palette_init(GLuint palette[])
 }
 
 static int
-screen_update(unsigned left, unsigned top, unsigned right, unsigned bottom)
+screen_update(struct screen *screen, unsigned left, unsigned top, unsigned right, unsigned bottom)
 {
 	GLsizei width = right - left + 1;
 	GLsizei height = bottom - top + 1;
 
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, state.screen.tex);
+	glBindTexture(GL_TEXTURE_2D, screen->tex);
 	// glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	// glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 #ifdef USE_GLES2 // GLES 2
-	glTexSubImage2D(GL_TEXTURE_2D, 0, left, top, width, height, GL_LUMINANCE, GL_UNSIGNED_BYTE, state.screen.data);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, left, top, width, height, GL_LUMINANCE, GL_UNSIGNED_BYTE, screen->data);
 #else // OpenGL 3+
 	// TODO: untested code path!
 	const GLint one_byte_swizzle[] = { GL_RED, GL_RED, GL_RED, GL_ONE };
 	glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, one_byte_swizzle);
-	glTexSubImage2D(GL_TEXTURE_2D, 0, left, top, width, height, GL_RED, GL_UNSIGNED_BYTE, state.screen.data);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, left, top, width, height, GL_RED, GL_UNSIGNED_BYTE, screen->data);
 #endif
 	return OK;
 }
 
 static void
-screen_update_full(void)
+screen_update_full(struct screen *screen)
 {
-	screen_update(0, 0, state.screen.width - 1, state.screen.height - 1);
+	screen_update(screen, 0, 0, screen->width - 1, screen->height - 1);
+}
+
+static void
+screen_done(struct screen *screen)
+{
+	if (screen->shader.program) {
+		glUseProgram(0);
+		glDeleteProgram(screen->shader.program);
+		screen->shader.program = 0;
+	}
+
+	if (screen->buf) {
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
+		glDeleteBuffers(1, &screen->buf);
+		screen->buf = 0;
+	}
 }
 
 static int
-screen_init(int screen_width, int screen_height)
+screen_init(struct screen *screen, int screen_width, int screen_height)
 {
 	/* vertex shader source */
 	const GLchar vert_source[] = {
@@ -257,30 +273,30 @@ screen_init(int screen_width, int screen_height)
 		"}\n"
 	};
 
-	if (compile_shader(&state.screen.shader.program, vert_source, frag_source) != OK) {
+	if (compile_shader(&screen->shader.program, vert_source, frag_source) != OK) {
 		return ERR;
 	}
-	assert(state.screen.shader.program != 0);
+	assert(screen->shader.program != 0);
 
 	initgl_gl_check();
 
-	load_attributes(state.screen.shader.program, (const char*[]){ "vertex", "AttrMultiTexCoord0" }, &state.screen.shader.attr_vertex, 2);
-	load_uniforms(state.screen.shader.program, (const char*[]){ "color", "palette", "texture" }, &state.screen.shader.unif_color, 3);
+	load_attributes(screen->shader.program, (const char*[]){ "vertex", "AttrMultiTexCoord0" }, &screen->shader.attr_vertex, 2);
+	load_uniforms(screen->shader.program, (const char*[]){ "color", "palette", "texture" }, &screen->shader.unif_color, 3);
 
 	initgl_gl_check();
 
-	glUseProgram(state.screen.shader.program);
+	glUseProgram(screen->shader.program);
 
 	initgl_gl_check();
 
-	state.screen.width = screen_width;
-	state.screen.height = screen_height;
-	state.screen.data = malloc(screen_width * screen_height);
-	if (!state.screen.data) {
+	screen->width = screen_width;
+	screen->height = screen_height;
+	screen->data = malloc(screen_width * screen_height);
+	if (!screen->data) {
 		return ERR;
 	}
 
-	memset(state.screen.data, 0, screen_width * screen_height);
+	memset(screen->data, 0, screen_width * screen_height);
 
 	/*** Vertex Buffer ***/
 
@@ -295,9 +311,9 @@ screen_init(int screen_width, int screen_height)
 	glGenBuffers(1, &buf);
 	glBindBuffer(GL_ARRAY_BUFFER, buf);
 	glBufferData(GL_ARRAY_BUFFER, sizeof(vertex_data), vertex_data, GL_STATIC_DRAW);
-	glVertexAttribPointer(state.screen.shader.attr_vertex, 4, GL_FLOAT, 0, 16, 0);
-	glEnableVertexAttribArray(state.screen.shader.attr_vertex);
-	state.screen.buf = buf;
+	glVertexAttribPointer(screen->shader.attr_vertex, 4, GL_FLOAT, 0, 16, 0);
+	glEnableVertexAttribArray(screen->shader.attr_vertex);
+	screen->buf = buf;
 
 	initgl_gl_check();
 
@@ -309,7 +325,7 @@ screen_init(int screen_width, int screen_height)
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, screen_tex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, screen_width, screen_height, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, NULL);
-	state.screen.tex = screen_tex;
+	screen->tex = screen_tex;
 
 	// Palette texture
 	/* R/G/B */
@@ -325,77 +341,36 @@ screen_init(int screen_width, int screen_height)
 	const GLint lsbred_no_alpha_swizzle[] = { GL_RED, GL_GREEN, GL_BLUE, GL_ONE };
 	glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, lsb_no_alpha_swizzle);
 #endif
-	state.screen.palette_tex = palette_tex;
+	screen->palette_tex = palette_tex;
 
-	palette_init(state.screen.palette_buf);
+	palette_init(screen->palette_buf);
 	// TODO: share this in palette_update()
-	glBindTexture(GL_TEXTURE_2D, state.screen.palette_tex);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, state.screen.palette_buf);
-
-	return OK;
-}
-
-/* load shader, initialize GL state */
-static int
-my_gl_init(void)
-{
-	screen_init(320, 240);
-
-	screen_update_full();
-
-	initgl_gl_check();
+	glBindTexture(GL_TEXTURE_2D, screen->palette_tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, screen->palette_buf);
 
 	return OK;
 }
 
 static void
-my_gl_done(void)
+screen_paint(struct screen *screen)
 {
-	if (state.screen.shader.program) {
-		glUseProgram(0);
-		glDeleteProgram(state.screen.shader.program);
-		state.screen.shader.program = 0;
-	}
-
-	if (state.screen.buf) {
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-		glDeleteBuffers(1, &state.screen.buf);
-		state.screen.buf = 0;
-	}
-}
-
-static void
-my_key_init(void)
-{
-	up_key = lookup_key("Up");
-	down_key = lookup_key("Down");
-	left_key = lookup_key("Left");
-	right_key = lookup_key("Right");
-	fire_key = lookup_key("z");
-
-	log_debug("up=%d down=%d left=%d right=%d fire=%d", up_key, down_key, left_key, right_key, fire_key);
-}
-
-static void
-screen_paint(void)
-{
-	glBindBuffer(GL_ARRAY_BUFFER, state.screen.buf);
-	glUseProgram(state.screen.shader.program);
+	glBindBuffer(GL_ARRAY_BUFFER, screen->buf);
+	glUseProgram(screen->shader.program);
 
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, state.screen.tex);
+	glBindTexture(GL_TEXTURE_2D, screen->tex);
 
 	glActiveTexture(GL_TEXTURE1);
-	glBindTexture(GL_TEXTURE_2D, state.screen.palette_tex);
+	glBindTexture(GL_TEXTURE_2D, screen->palette_tex);
 
-	if (state.screen.shader.unif_color >= 0) {
-		glUniform4f(state.screen.shader.unif_color, 0.5, 0.5, 0.8, 1.0);
+	if (screen->shader.unif_color >= 0) {
+		glUniform4f(screen->shader.unif_color, 0.5, 0.5, 0.8, 1.0);
 	}
-	if (state.screen.shader.unif_palette >= 0) {
-		glUniform1i(state.screen.shader.unif_palette, 1); // palette_tex is GL_TEXTURE1
+	if (screen->shader.unif_palette >= 0) {
+		glUniform1i(screen->shader.unif_palette, 1); // palette_tex is GL_TEXTURE1
 	}
-	if (state.screen.shader.unif_texture >= 0) {
-		glUniform1i(state.screen.shader.unif_texture, 0); // screen_tex is GL_TEXTURE0
+	if (screen->shader.unif_texture >= 0) {
+		glUniform1i(screen->shader.unif_texture, 0); // screen_tex is GL_TEXTURE0
 	}
 
 	initgl_gl_check();
@@ -413,6 +388,74 @@ screen_paint(void)
 	glBindTexture(GL_TEXTURE_2D, 0);
 
 	initgl_gl_check();
+}
+
+static int
+sprite_group_init(struct sprite_group *group, unsigned count)
+{
+	group->count = count;
+	group->instance = malloc(count * sizeof(*group->instance));
+	if (!group->instance) {
+		group->count = 0;
+		return ERR;
+	}
+
+	unsigned i;
+	for (i = 0; i < count; i++) {
+		struct sprite_instance *sprite = group->instance + i;
+
+		*sprite = (struct sprite_instance){};
+
+		// TODO: initialize each sprite
+	}
+
+	return OK;
+}
+
+static void
+sprite_group_paint(struct sprite_group *sprite)
+{
+	unsigned count = sprite->count;
+	unsigned i;
+
+	for (i = 0; i < count; i++) {
+		struct sprite_instance *sprite = group->instance + i;
+
+		// TODO: dispatch draw calls for sprites
+	}
+}
+
+/* load shader, initialize GL state */
+static int
+my_gl_init(void)
+{
+	screen_init(&state.screen, 320, 240);
+
+	screen_update_full(&state.screen);
+
+	sprite_group_init(&state.sprite_group, 1);
+
+	initgl_gl_check();
+
+	return OK;
+}
+
+static void
+my_gl_done(void)
+{
+	screen_done(&state.screen);
+}
+
+static void
+my_key_init(void)
+{
+	up_key = lookup_key("Up");
+	down_key = lookup_key("Down");
+	left_key = lookup_key("Left");
+	right_key = lookup_key("Right");
+	fire_key = lookup_key("z");
+
+	log_debug("up=%d down=%d left=%d right=%d fire=%d", up_key, down_key, left_key, right_key, fire_key);
 }
 
 static void
@@ -474,14 +517,14 @@ animate(void)
 	unsigned tick = state.tick++;
 
 	GLsizei x, y;
-	unsigned row_bytes = state.screen.width;
-	GLubyte *screen_data = state.screen.data;
+	unsigned row_bytes = screen->width;
+	GLubyte *screen_data = screen->data;
 
 	if (!screen_data) { return; }
 
-	for (y = 0; y < state.screen.height; y++) {
-		GLubyte *row = state.screen.data + y * row_bytes;
-		for (x = 0; x < state.screen.width; x++) {
+	for (y = 0; y < screen->height; y++) {
+		GLubyte *row = screen->data + y * row_bytes;
+		for (x = 0; x < screen->width; x++) {
 			row[x] = ((x + (y ^ 12) + tick) % 16) + 232;
 		}
 	}
