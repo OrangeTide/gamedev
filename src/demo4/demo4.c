@@ -144,62 +144,6 @@ load_uniforms(GLuint program, const char **unif_names, GLint *unif_out, unsigned
 	return result;
 }
 
-static int
-load_buffer(GLuint *buf_out, GLuint *screen_tex_out, int screen_width, int screen_height, GLuint *pal_tex_out)
-{
-	if (!buf_out) {
-		errno = EINVAL;
-		return ERR;
-	}
-
-	/*** Vertex Buffer ***/
-
-	static const GLfloat vertex_data[] = {
-		-1.0, -1.0, 1.0, 1.0,
-		1.0, -1.0, 1.0, 1.0,
-		1.0, 1.0, 1.0, 1.0,
-		-1.0, 1.0, 1.0, 1.0
-	};
-
-	GLuint buf = 0;
-	glGenBuffers(1, &buf);
-	glBindBuffer(GL_ARRAY_BUFFER, buf);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertex_data), vertex_data, GL_STATIC_DRAW);
-	glVertexAttribPointer(state.screen.shader.attr_vertex, 4, GL_FLOAT, 0, 16, 0);
-	glEnableVertexAttribArray(state.screen.shader.attr_vertex);
-	*buf_out = buf;
-
-	initgl_gl_check();
-
-	/*** Textures ***/
-
-	// Screen texture
-	GLuint screen_tex = 0;
-	glGenTextures(1, &screen_tex);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, screen_tex);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, screen_width, screen_height, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, NULL);
-	*screen_tex_out = screen_tex;
-
-	// Palette texture
-	/* R/G/B */
-	GLuint palette_tex = 0;
-	glActiveTexture(GL_TEXTURE1);
-	glGenTextures(1, &palette_tex);
-	glBindTexture(GL_TEXTURE_2D, palette_tex);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-#ifndef USE_GLES2 // GLES 3+ / OpenGL 3+
-	// TODO: untested code path!
-	const GLint lsbred_no_alpha_swizzle[] = { GL_RED, GL_GREEN, GL_BLUE, GL_ONE };
-	glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, lsb_no_alpha_swizzle);
-#endif
-	*pal_tex_out = palette_tex;
-
-	return OK;
-}
-
 /* initialize 256 color palette */
 static void
 palette_init(GLuint palette[])
@@ -287,22 +231,6 @@ screen_update_full(void)
 static int
 screen_init(int screen_width, int screen_height)
 {
-	state.screen.width = screen_width;
-	state.screen.height = screen_height;
-	state.screen.data = malloc(screen_width * screen_height);
-	if (!state.screen.data) {
-		return ERR;
-	}
-
-	memset(state.screen.data, 0, screen_width * screen_height);
-
-	return OK;
-}
-
-/* load shader, initialize GL state */
-static int
-my_gl_init(void)
-{
 	/* vertex shader source */
 	const GLchar vert_source[] = {
 		"#version 100 // GLESv1\n"
@@ -345,16 +273,73 @@ my_gl_init(void)
 
 	initgl_gl_check();
 
-	screen_init(320, 240);
+	state.screen.width = screen_width;
+	state.screen.height = screen_height;
+	state.screen.data = malloc(screen_width * screen_height);
+	if (!state.screen.data) {
+		return ERR;
+	}
 
-	/* attr_vertex, etc. must be set before calling this */
-	load_buffer(&state.screen.buf, &state.screen.tex, state.screen.width,
-		    state.screen.height, &state.screen.palette_tex);
+	memset(state.screen.data, 0, screen_width * screen_height);
 
-	// TODO: place this in load_palette()
+	/*** Vertex Buffer ***/
+
+	static const GLfloat vertex_data[] = {
+		-1.0, -1.0, 1.0, 1.0,
+		1.0, -1.0, 1.0, 1.0,
+		1.0, 1.0, 1.0, 1.0,
+		-1.0, 1.0, 1.0, 1.0
+	};
+
+	GLuint buf = 0;
+	glGenBuffers(1, &buf);
+	glBindBuffer(GL_ARRAY_BUFFER, buf);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertex_data), vertex_data, GL_STATIC_DRAW);
+	glVertexAttribPointer(state.screen.shader.attr_vertex, 4, GL_FLOAT, 0, 16, 0);
+	glEnableVertexAttribArray(state.screen.shader.attr_vertex);
+	state.screen.buf = buf;
+
+	initgl_gl_check();
+
+	/*** Textures ***/
+
+	// Screen texture
+	GLuint screen_tex = 0;
+	glGenTextures(1, &screen_tex);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, screen_tex);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, screen_width, screen_height, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, NULL);
+	state.screen.tex = screen_tex;
+
+	// Palette texture
+	/* R/G/B */
+	GLuint palette_tex = 0;
+	glActiveTexture(GL_TEXTURE1);
+	glGenTextures(1, &palette_tex);
+	glBindTexture(GL_TEXTURE_2D, palette_tex);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+#ifndef USE_GLES2 // GLES 3+ / OpenGL 3+
+	// TODO: untested code path!
+	const GLint lsbred_no_alpha_swizzle[] = { GL_RED, GL_GREEN, GL_BLUE, GL_ONE };
+	glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, lsb_no_alpha_swizzle);
+#endif
+	state.screen.palette_tex = palette_tex;
+
 	palette_init(state.screen.palette_buf);
+	// TODO: share this in palette_update()
 	glBindTexture(GL_TEXTURE_2D, state.screen.palette_tex);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 256, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, state.screen.palette_buf);
+
+	return OK;
+}
+
+/* load shader, initialize GL state */
+static int
+my_gl_init(void)
+{
+	screen_init(320, 240);
 
 	screen_update_full();
 
