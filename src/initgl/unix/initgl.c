@@ -1,7 +1,21 @@
 #include "initgl.h"
 
+#include <stdlib.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <time.h>
+#include <sys/select.h>
+
+#include <EGL/egl.h>
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
+
+#include "log.h"
+#include "report.h"
+
+
 #ifndef EGL_OPENGL_ES3_BIT_KHR
-#define EGL_OPENGL_ES3_BIT_KHR 0x00000040
+#  define EGL_OPENGL_ES3_BIT_KHR 0x00000040
 #endif
 
 /**********************************************************************/
@@ -12,12 +26,11 @@ void surface_swap(struct xwindow_info *info);
 /**********************************************************************/
 
 int terminate_flag;
+static fd_set readfds;
+static int max_fd;
+static const double max_frame_time = 1 / 60.0f;
 
 /**********************************************************************/
-
-#include <EGL/egl.h>
-#include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
 
 static const
 EGLint config_attribs[] = {
@@ -40,12 +53,6 @@ EGLint gles_attr_list[] = {
 };
 
 /**********************************************************************/
-
-#include <stdlib.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
-#include "log.h"
-#include "report.h"
 
 struct xwindow_info {
 	struct xwindow_info *next;
@@ -207,6 +214,9 @@ display_init(void)
 	free(configs);
 #endif
 
+	FD_ZERO(&readfds);
+	max_fd = XConnectionNumber(xdisplay);
+
 	return INITGL_OK;
 }
 
@@ -263,13 +273,45 @@ window_new(const struct window_callback_functions *callbacks)
 	return INITGL_OK;
 }
 
+unsigned long long
+clock_now(void)
+{
+	struct timespec tp;
+	clock_gettime(CLOCK_MONOTONIC, &tp);
+	unsigned long long t = tp.tv_sec * 1000000000UL + tp.tv_nsec;
+	return t;
+}
+
+/* find the difference between two monotonic timestamps, return is in seconds. */
+double
+clock_diff(unsigned long long t1, unsigned long long t0)
+{
+	return (double)((t1 - t0) / 1e9);
+}
+
+static void
+initgl_wait(void)
+{
+	static long long prev;
+	unsigned long long now = clock_now();
+	double sec = max_frame_time - clock_diff(now, prev);
+
+	if (!prev || sec < 0) {
+		sec = max_frame_time;
+	}
+
+	struct timeval tv = { sec, (sec - (unsigned)sec) * 1e6 };
+
+	FD_SET(XConnectionNumber(xdisplay), &readfds);
+	// log_debug("Waiting %d,%d", tv.tv_sec, tv.tv_usec);
+	select(max_fd + 1, &readfds, NULL, NULL, &tv);
+	prev = clock_now();
+}
+
 void
 surface_swap(struct xwindow_info *info)
 {
-	/*
-	glFlush();
-	glFinish();
-	*/
+	initgl_wait();
 	eglSwapBuffers(display, info->surface);
 	XSync(xdisplay, False);
 #if 0

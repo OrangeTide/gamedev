@@ -37,6 +37,8 @@ void paint_all(void);
 int window_new(const struct window_callback_functions *callbacks);
 void process_events(void);
 int lookup_key(const char *s);
+unsigned long long clock_now(void);
+double clock_diff(unsigned long long t1, unsigned long long t0);
 
 void window_register_paint(window_paintfunc *f);
 void window_register_idle(window_idlefunc *f);
