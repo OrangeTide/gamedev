@@ -3,6 +3,8 @@
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
+#include <stdlib.h>
+#include "log.h"
 
 #define INITGL_OK (0)
 #define INITGL_ERR (-1)
