@@ -4,6 +4,7 @@
 #endif
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <timeapi.h>
 #include <tchar.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
@@ -59,7 +60,11 @@ static int current_index = INITGL_ERR;
 static struct win_info window[INITGL_MAX_WINDOWS];
 static int default_width = 640, default_height = 480;
 static LONGLONG qpcFrequency;
+static BOOL fQpc = FALSE;      // use QueryPerformanceCounters if TRUE
 static BOOL dirty_flag = TRUE;
+static const DWORD fps = 25;
+static DWORD tFrame;
+static LONGLONG tNext;
 int terminate_flag;
 
 /**********************************************************************/
@@ -426,7 +431,20 @@ window_new(const struct window_callback_functions *callback)
 int
 display_init(void)
 {
-	QueryPerformanceCounter((LARGE_INTEGER*)&qpcFrequency);
+        if (QueryPerformanceFrequency((LARGE_INTEGER *) &qpcFrequency)) {
+            fQpc = TRUE;
+        } else {
+            fQpc = FALSE;
+        }
+
+        /* initialize tNext so that it is < tCurrent in the first iteration of the loop */
+        if (fQpc) {
+                tFrame = qpcFrequency / fps;
+                QueryPerformanceCounter((LARGE_INTEGER *) &tNext);
+        } else {
+                tFrame = 1000 / fps;
+                tNext = timeGetTime(); // TODO: handle wrap around
+        }
 
 	return INITGL_OK;
 }
@@ -461,30 +479,36 @@ void
 process_events(void)
 {
 	MSG uMsg;
+        LONGLONG tCurrent;
 
-	LONGLONG qpcStart, qpcEnd;
-	QueryPerformanceCounter((LARGE_INTEGER*)&qpcStart);
+        if (PeekMessage(&uMsg, NULL, 0, 0, PM_REMOVE) > 0) {
+                log_debug("MSG %d", uMsg.message);
+                TranslateMessage(&uMsg);
+                DispatchMessage(&uMsg);
+                if (uMsg.message == WM_QUIT) {
+                        terminate_flag = TRUE;
+                        return;
+                }
+        } else {
+                if (fQpc) {
+                        QueryPerformanceCounter((LARGE_INTEGER *) &tCurrent);
+                } else {
+                        tCurrent = timeGetTime();
+                }
 
-	if (dirty_flag) {
-		while (!terminate_flag && PeekMessage(&uMsg, NULL, 0, 0, PM_REMOVE) > 0) {
-			log_debug("MSG %d", uMsg.message);
-			TranslateMessage(&uMsg);
-			DispatchMessage(&uMsg);
-		}
-	} else {
-		log_debug("Waiting for events ...");
-		while (!terminate_flag && GetMessage(&uMsg, NULL, 0, 0)) {
-			log_debug("MSG %d", uMsg.message);
-			TranslateMessage(&uMsg);
-			DispatchMessage(&uMsg);
-		}
-	}
+                /* render when the frame time has elapsed */
+                if (tCurrent >= tNext) {
+                        dirty_flag = TRUE;
 
-	QueryPerformanceCounter((LARGE_INTEGER*)&qpcEnd);
-	double dTime = (double)(qpcEnd - qpcStart) / (double)qpcFrequency;
-	// timeFactor += dTime * 0.01f;
+                        /* move forward to next frame */
+                        tNext += tFrame;
 
-	// TODO: if (_hRenderThread != NULL) CloseHandle(_hRenderThread);
+                        /* drop a frames if we are behind the current frame */
+                        if (tNext < tCurrent) {
+                                tNext = tCurrent + tFrame;
+                        }
+                }
+        }
 }
 
 void
@@ -493,7 +517,11 @@ paint_all(void)
 	unsigned i;
 	int old_index = current_index;
 
-	dirty_flag = FALSE;
+        if (!dirty_flag) {
+                return;
+        }
+        dirty_flag = FALSE;
+
 	for (i = 0; i < INITGL_MAX_WINDOWS; i++) {
 		struct win_info *info = &window[i];
 		window_select(i);
