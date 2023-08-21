@@ -25,6 +25,8 @@
 #define INITGL_MAX_WINDOWS 4
 #endif
 
+#define INITGL_WAIT_THRESHOLD_MS 3
+
 #define initgl_egl_check() do { \
 		GLenum e = eglGetError(); \
 		if (e != EGL_SUCCESS) {\
@@ -497,7 +499,8 @@ process_events(void)
                 }
 
                 /* render when the frame time has elapsed */
-                if (tCurrent >= tNext) {
+		if (tCurrent >= tNext) {
+
                         dirty_flag = TRUE;
 
                         /* move forward to next frame */
@@ -507,7 +510,17 @@ process_events(void)
                         if (tNext < tCurrent) {
                                 tNext = tCurrent + tFrame;
                         }
-                }
+                } else {
+			/* try to sleep to near the end of the frame */
+			LONGLONG tRemaining = tNext - tCurrent ;
+			if (fQpc) {
+				tRemaining /= qpcFrequency;
+			}
+
+			if (tRemaining >= INITGL_WAIT_THRESHOLD_MS) {
+				MsgWaitForMultipleObjects(0, NULL, FALSE, tRemaining, QS_ALLEVENTS);
+			}
+		}
         }
 }
 
