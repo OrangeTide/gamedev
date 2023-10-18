@@ -13,7 +13,7 @@
 
 /**********************************************************************/
 
-static int up_key, down_key, left_key, right_key, fire_key;
+static int up_key, down_key, left_key, right_key, fire_key[2];
 
 struct shader_info {
 	GLuint program;
@@ -583,9 +583,10 @@ my_key_init(void)
 	down_key = lookup_key("Down");
 	left_key = lookup_key("Left");
 	right_key = lookup_key("Right");
-	fire_key = lookup_key("z");
+	fire_key[0] = lookup_key("z");
+	fire_key[1] = lookup_key("Space");
 
-	log_debug("up=%d down=%d left=%d right=%d fire=%d", up_key, down_key, left_key, right_key, fire_key);
+	log_debug("up=%d down=%d left=%d right=%d fire=[%d %d]", up_key, down_key, left_key, right_key, fire_key[0], fire_key[1]);
 }
 
 static void
@@ -625,7 +626,7 @@ keyevent(int key)
 		log_debug("Left");
 	} else if (key == right_key) {
 		log_debug("Right");
-	} else if (key == fire_key) {
+	} else if (key == fire_key[0] || key == fire_key[1]) {
 		log_debug("Fire!");
 	}
 }

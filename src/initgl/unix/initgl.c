@@ -1,10 +1,13 @@
 #include "initgl.h"
 
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#include <sys/select.h>
+
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
-#include <time.h>
-#include <sys/select.h>
 
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
@@ -490,14 +493,19 @@ paint_all(void)
 }
 
 int
-lookup_key(const char *s)
+lookup_key(const char *name)
 {
-	KeySym sym = XStringToKeysym(s);
-	if (NoSymbol) {
-		return -1;
+	/* hack around a few names that don't have symbolic name */
+	if (!strcasecmp(name, "Space")) {
+		name = " ";
 	}
-	KeyCode code = XKeysymToKeycode(xdisplay, sym);
 
+	KeySym sym = XStringToKeysym(name);
+	if (sym == NoSymbol)
+		return -1;
+	KeyCode code = XKeysymToKeycode(xdisplay, sym);
+	if (code == 0)
+		return -1;
 	return code;
 }
 
@@ -530,3 +538,40 @@ window_register_typingkeyboard(window_typingkeyboardfunc *f)
 {
 	current_xwindow_info->callback.typingkeyboard = f;
 }
+
+#if 0 // TODO
+/* return 0 to ignore, or non-zero if processed */
+int event_parse_input_utf8(struct window *w, XEvent *ev,
+	char *buf, size_t bufmax)
+{
+	KeySym sym;
+	Status status;
+	int buflen;
+
+	if (ev->xkey.type != KeyPress)
+		return -1;
+
+	buflen = Xutf8LookupString(w->ic, &ev->xkey, buf, bufmax - 1,
+		&sym, &status);
+	if (buflen < 0) abort(); // TODO: implement error handler
+	buf[buflen] = 0;
+
+	if (status == XLookupChars || status == XLookupBoth)
+		return buflen;
+	// TODO: write a function that uses XLookupKeySym
+	return 0;
+}
+
+/* return 0 to ignore, or non-zero if processed */
+int event_parse_key(struct window *w, XEvent *ev, unsigned *keycode, int *down)
+{
+	if (ev->xkey.type == KeyPress || ev->xkey.type == KeyRelease) {
+		if (down)
+			*down = ev->xkey.type == KeyPress;
+		if (keycode)
+			*keycode = ev->xkey.keycode;
+		return 1;
+	}
+	return 0;
+}
+#endif
