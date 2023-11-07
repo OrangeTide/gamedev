@@ -1,0 +1,18 @@
+$(BEGIN_TARGET)
+NAME = imgui
+TYPE = lib
+SRCS = *.cpp
+INCLUDEDIR = backends
+CFLAGS = -Wall -W -O2
+CFLAGS += -g
+### Windows
+SRCS.Windows_NT = backends/imgui_impl_win32.cpp backends/imgui_impl_dx10.cpp
+CFLAGS.Windows_NT = -mwin32
+# TODO: pick the correct libraries
+LDLIBS.Windows_NT = -lgdi32 -lwinmm -lEGL -lGLESv2 -lXinput
+### Linux
+SRCS.Linux = backends/imgui_impl_sdl2.cpp backends/imgui_impl_opengl3.cpp
+LDLIBS.Linux = $(shell sdl2-config --libs) $(shell pkg-config --libs gl) -lm
+CFLAGS.Linux = $(shell sdl2-config --cflags) $(shell pkg-config --cflags gl) -flto=auto
+LDFLAGS.Linux = -flto=auto
+$(END_TARGET)

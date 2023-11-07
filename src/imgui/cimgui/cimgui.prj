@@ -1,0 +1,9 @@
+$(BEGIN_TARGET)
+NAME = cimgui
+TYPE = lib
+SRCS = *.cpp
+USES = imgui
+INCLUDEDIR = ../
+CFLAGS = -Wall -W -O2
+CFLAGS += -g
+$(END_TARGET)
