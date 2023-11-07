@@ -138,11 +138,11 @@ config.mk :
 	@false
 
 # build actions
-link.exe = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ $(LDFLAGS) $^ $(LDLIBS)
-link.elf = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ $(LDFLAGS) $(if $(LINKERFILE),-T $(LINKERFILE)) $^ $(LDLIBS)
+link.exe = $(if ${CXX_MODE},$(CXX),$(CC)) -o $@ $(LDFLAGS) $^ $(LDLIBS)
+link.elf = $(if ${CXX_MODE},$(CXX),$(CC)) -o $@ $(LDFLAGS) $(if $(LINKERFILE),-T $(LINKERFILE)) $^ $(LDLIBS)
 # TODO: support building Windows dll
-link.dll = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ -shared -Wl,-soname=$@.0 $(LDFLAGS) $^ $(LDLIBS)
-link.bin = $(if ${SRCS_CPP},$(CXX),$(CC)) -o $@ $(LDFLAGS) $^ $(LDLIBS)
+link.dll = $(if ${CXX_MODE},$(CXX),$(CC)) -o $@ -shared -Wl,-soname=$@.0 $(LDFLAGS) $^ $(LDLIBS)
+link.bin = $(if ${CXX_MODE},$(CXX),$(CC)) -o $@ $(LDFLAGS) $^ $(LDLIBS)
 link.lib = $(if $^,$(AR) $(ARFLAGS) $@ $^,$(error No files for archive))
 compile.c = $(CC) -c -o $@ $(CCOPTS) $(CPPFLAGS) $(CFLAGS) $<
 compile.cpp = $(CXX) -c -o $@ $(CCOPTS) $(CPPFLAGS) $(CFLAGS) $(CXXFLAGS) $<
@@ -170,6 +170,7 @@ endef
 define begin-project
 $(eval CURRENT_PROJECT_DIR := $(dir $(lastword ${MAKEFILE_LIST})))
 HERE := ${CURRENT_PROJECT_DIR}
+$(info CPD=$(CURRENT_PROJECT_DIR))
 endef
 
 TARGET_LIST :=
@@ -185,7 +186,7 @@ _EXEC.${NAME} :=
 else
 TARGET_LIST := ${TARGET_LIST} ${NAME}
 _EXEC_BASE.${NAME} := $(if ${EXEC},${EXEC},${NAME})
-$(eval _EXEC.${NAME} := ${TARGETDIR.${_TYPE.${NAME}}}${if ${EXEC},${EXEC},${NAME}}${EXTENSION.${_TYPE.${NAME}}})
+$(eval _EXEC.${NAME} := ${TARGETDIR.${_TYPE.$(NAME)}}${if ${EXEC},${EXEC},$(NAME)}${EXTENSION.${_TYPE.$(NAME)}})
 endif
 $(eval _CFLAGS.${NAME} := ${CFLAGS} ${CFLAGS.$(TARGET_OS)} ${CFLAGS.$(TARGET_ARCH)} ${CFLAGS.$(TARGET_OS).$(TARGET_ARCH)})
 $(eval _CXXFLAGS.${NAME} := ${CXXFLAGS} ${CXXFLAGS.$(TARGET_OS)} ${CXXFLAGS.$(TARGET_ARCH)} ${CXXFLAGS.$(TARGET_OS).$(TARGET_ARCH)})
@@ -206,28 +207,31 @@ $(eval _COPYFILES.${NAME} := \
 	${COPYFILES} ${COPYFILES.$(TARGET_OS)} ${COPYFILES.$(TARGET_ARCH)} ${COPYFILES.$(TARGET_OS).$(TARGET_ARCH)}), \
 	))
 ifeq ($${TYPE},lib)
-_PROVIDES_LDLIBS.${NAME} := ${_LDLIBS.${NAME}}
-_PROVIDES_LDFLAGS.${NAME} := ${_LDFLAGS.${NAME}} \
+$(eval _PROVIDES_LDLIBS.${NAME} = ${_LDLIBS.$(NAME)} \
+	$$(foreach u,$${_USES.$(NAME)},$${_EXEC.$$u} $${_LDLIBS.$$u}))
+_PROVIDES_LDFLAGS.${NAME} := ${_LDFLAGS.$(NAME)} \
+	$(foreach u,${_USES.$(NAME)},$${_PROVIDES_LDFLAGS.$u}) \
 	$(if ${LIBDIR}${LIBDIR.$(TARGET_OS)}${LIBDIR.$(TARGET_ARCH)}${LIBDIR.$(TARGET_OS).$(TARGET_ARCH)}, \
 	$(addprefix -L${CURRENT_PROJECT_DIR}, \
 	${LIBDIR} ${LIBDIR.$(TARGET_OS)} ${LIBDIR.$(TARGET_ARCH)} ${LIBDIR.$(TARGET_OS).$(TARGET_ARCH)}), \
 	)
-endif
-ifeq ($${TYPE},header)
-_PROVIDES_CPPFLAGS.${NAME} += $(_CPPFLAGS.${NAME})
-_PROVIDES_CXXFLAGS.${NAME} := $(_CXXFLAGS.${NAME})
 _PROVIDES_CFLAGS.${NAME} := $(_CFLAGS.${NAME})
 endif
+ifeq ($${TYPE},header)
+_PROVIDES_CXXFLAGS.${NAME} = $(_CXXFLAGS.${NAME})
+_PROVIDES_CFLAGS.${NAME} = $(_CFLAGS.${NAME})
+endif
 _PROVIDES_CPPFLAGS.${NAME} := \
+	$(foreach u,${_USES.$(NAME)},$${_PROVIDES_CPPFLAGS.$u}) \
 	$(if ${INCLUDEDIR}${INCLUDEDIR.$(TARGET_OS)}${INCLUDEDIR.$(TARGET_ARCH)}${INCLUDEDIR.$(TARGET_OS).$(TARGET_ARCH)}, \
-	$(addprefix -I${CURRENT_PROJECT_DIR}, \
-	${INCLUDEDIR} ${INCLUDEDIR.$(TARGET_OS)} ${INCLUDEDIR.$(TARGET_ARCH)} ${INCLUDEDIR.$(TARGET_OS).$(TARGET_ARCH)}), \
+	$(sort -I${CURRENT_PROJECT_DIR} $(addprefix -I${CURRENT_PROJECT_DIR}, \
+	${INCLUDEDIR} ${INCLUDEDIR.$(TARGET_OS)} ${INCLUDEDIR.$(TARGET_ARCH)} ${INCLUDEDIR.$(TARGET_OS).$(TARGET_ARCH)})), \
 	-I${CURRENT_PROJECT_DIR})
 $(eval _SRCS.${NAME} := $(strip $(wildcard $(addprefix ${CURRENT_PROJECT_DIR}, ${SRCS} ${SRCS.$(TARGET_OS)} ${SRCS.$(TARGET_ARCH)} ${SRCS.$(TARGET_OS).$(TARGET_ARCH)}))))
 _EXTRA.${NAME} := ${EXTRA} ${EXTRA.$(TARGET_OS)} ${EXTRA.$(TARGET_ARCH)} ${EXTRA.$(TARGET_OS).$(TARGET_ARCH)}
 $(if $(_SRCS.${NAME}),,$(error No SRCS found!))
-$(call set-sources,${NAME},${_SRCS.${NAME}})
-$(eval _REAL_OBJS.${NAME} := ${OBJS} $(foreach X,${EXTENSIONS},$(patsubst %.$X,$(BUILDDIR)%.o,$(filter %.$X,${_SRCS.${NAME}}))))
+$(call set-sources,${NAME},${_SRCS.$(NAME)})
+$(eval _REAL_OBJS.${NAME} := ${OBJS} $(foreach X,${EXTENSIONS},$(patsubst %.$X,$(BUILDDIR)%.o,$(filter %.$X,${_SRCS.$(NAME)}))))
 ALL_DEPS := ${ALL_DEPS} $(patsubst %.o,%.d,${_REAL_OBJS.$(NAME)})
 $(eval ALL_DIRS := ${ALL_DIRS} $(dir ${_EXEC.$(NAME)} ${_REAL_OBJS.$(NAME)}))
 BUILD_DIRS := $$(sort $$(BUILD_DIRS) $$(dir $$(_REAL_OBJS.${NAME})))
@@ -247,7 +251,7 @@ test :: test-$1
 ${_EXEC.$1} : ${_REAL_OBJS.$1} $(foreach u,${_USES.$1},${_EXEC.$u}) | $(dir ${_EXEC.$1}) \
 	$(foreach u,${_USES.$1},$(addprefix ${TARGETDIR.${_TYPE.$1}},$(notdir ${_COPYFILES.$u})))
 	$$(link.${_TYPE.$1})
-${_EXEC.$1} : SRCS_CPP = ${_SRCS_cpp.$1}
+${_EXEC.$1} : CXX_MODE := $(if $(foreach u,${_USES.$1},${_SRCS_cpp.$u}),1,)
 ${_EXEC.$1} : CFLAGS = ${_CFLAGS.$1} $(foreach u,${_USES.$1},${_PROVIDES_CFLAGS.$u})
 ${_EXEC.$1} : CXXFLAGS = ${_CXXFLAGS.$1} $(foreach u,${_USES.$1},${_PROVIDES_CXXFLAGS.$u})
 ${_EXEC.$1} : CPPFLAGS = ${_CPPFLAGS.$1} -I${_BASEDIR.$1} $(foreach u,${_USES.$1},${_PROVIDES_CPPFLAGS.$u})
