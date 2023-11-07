@@ -1,6 +1,6 @@
 # Jon's Modular Makefile
 # You are free to modify, rename, steal, or redistribute this file.
-# Version: May 2023
+# Version: November 2023
 ############################################################################
 # Usage:
 # 1. Modify PROJECTS variable in this file to scan your source directories.
@@ -117,13 +117,11 @@ TARGETDIR.dll := ${TOP}bin/$(TARGET_OS)-$(TARGET_ARCH)/
 TARGETDIR.bin := ${TOP}bin/$(TARGET_OS)-$(TARGET_ARCH)/
 TARGETDIR.lib := ${BUILDDIR}lib/
 
-# hack: manually add any empty directories.
-BUILD_DIRS := $(BUILDDIR) $(BUILDDIR)src/ $(BUILDDIR)src/arch/ $(TARGETDIR.lib)
-
 all ::
 clean ::
 clean-bins :: ; $(RM) $(ALL_DEPS)
-clean-all :: clean clean-bins ; -$(call rmdir,$(wildcard $(call reverse,$(BUILD_DIRS))))
+clean-all :: clean clean-bins ; $(clean.cmd)
+clean-project ::
 .PHONY : all clean clean-all clean-bins distclean test
 distclean : clean-all
 	-rmdir $(BUILDDIR)
@@ -151,8 +149,11 @@ compile.cpp = $(CXX) -c -o $@ $(CCOPTS) $(CPPFLAGS) $(CFLAGS) $(CXXFLAGS) $<
 compile.S = $(CC) -c -o $@ $(CPPFLAGS) $(ASFLAGS) $<
 copy = $(CP) $< $@
 
-# macros
+## macros
+# reverse a list:
 reverse = $(if $(1),$(call reverse,$(wordlist 2,$(words $(1)),$(1)))) $(firstword $(1))
+# explode a path into a series of subdirectories
+subby = $(sort $(filter-out .,$(if $(1),$(call subby,$(filter-out $(1),$(patsubst %/,%,$(dir $(1)))))) $(patsubst %/,%,$(1))))
 
 to-ext = $(foreach X,${EXTENSIONS},$(patsubst %.$X,%.$1,$(filter %.$X,$2)))
 set-sources = $(foreach X,${EXTENSIONS},$(eval _SRCS_$X.$1 := $(filter %.$X,$2)))
@@ -228,6 +229,7 @@ $(if $(_SRCS.${NAME}),,$(error No SRCS found!))
 $(call set-sources,${NAME},${_SRCS.${NAME}})
 $(eval _REAL_OBJS.${NAME} := ${OBJS} $(foreach X,${EXTENSIONS},$(patsubst %.$X,$(BUILDDIR)%.o,$(filter %.$X,${_SRCS.${NAME}}))))
 ALL_DEPS := ${ALL_DEPS} $(patsubst %.o,%.d,${_REAL_OBJS.$(NAME)})
+$(eval ALL_DIRS := ${ALL_DIRS} $(dir ${_EXEC.$(NAME)} ${_REAL_OBJS.$(NAME)}))
 BUILD_DIRS := $$(sort $$(BUILD_DIRS) $$(dir $$(_REAL_OBJS.${NAME})))
 CURRENT_PROJECT_DIR := # empty
 endef
@@ -260,6 +262,11 @@ ifneq (${_REAL_OBJS.$1},)
 clean :: ; $$(RM) ${_REAL_OBJS.$1}
 endif
 endif
+endef
+
+define clean.cmd
+	$(RM) $(ALL_DEPS)
+	-$(call rmdir,$(wildcard $(call reverse,$(call subby,$(sort ${ALL_DIRS})))))
 endef
 
 # Create missing directories
