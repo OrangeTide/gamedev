@@ -4,6 +4,8 @@
 .*.swp
 *~
 
+/config.mk
+
 /src/initgl/include/EGL/
 /src/initgl/include/GLES2/
 /src/initgl/include/GLES3/
