@@ -1,0 +1,9 @@
+$(BEGIN_TARGET)
+NAME = legend
+TYPE = exe
+SRCS = *.c
+CFLAGS = -Wall -W -O2
+CFLAGS += -g
+USES = initgl
+COPYFILES = guy1.seq sheet1.png
+$(END_TARGET)

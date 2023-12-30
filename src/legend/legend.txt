@@ -1,0 +1,12 @@
+
+source image - A8
+	image_as_native() - copy region to a native with colormap conversion.
+	image_copy() - copy a region to another region.
+	image_width(), image_height() - get information about image
+native_image - RGB888, etc.
+	native_new(width, height)
+spr cache
+	spr_new(width, height) - create a new cache object
+	spr_cache(cache, handle, native_image) - returns a handle or updates an image
+	spr_check(cache, handle) - is it still in the cache
+	spr_get(cache, handle) - get the region from cache, or error if not in cache
