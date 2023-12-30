@@ -1,9 +1,9 @@
 # Jon's Modular Makefile
 # You are free to modify, rename, steal, or redistribute this file.
-# Version: November 2023
+# Version: December 2023
 ############################################################################
 # Usage:
-# 1. Modify PROJECTS variable in this file to scan your source directories.
+# 1. Modify PROJECT_DIRS variable in this file to indicate source directories.
 # 2. Create a .prj file in each source directory describing your project(s).
 # 3. Run `make` (must be GNU make)
 #    a. optionally specify a config: `make CONFIG=configs/yourconfig.mk`
@@ -15,7 +15,8 @@
 #
 ############################################################################
 TOP := $(dir $(lastword $(call fixpath,${MAKEFILE_LIST})))
-PROJECTS := $(wildcard *.prj src/*.prj src/*/*.prj src/*/*/*.prj src/*/*/*/*.prj)
+PROJECT_DIRS := src
+# alternative for small projects : PROJECT_DIRS := .
 
 # Save default compilers, assume these are for the Host's toolchain.
 HOSTCC := $(CC)
@@ -152,6 +153,8 @@ copy = $(CP) $< $@
 ## macros
 # reverse a list:
 reverse = $(if $(1),$(call reverse,$(wordlist 2,$(words $(1)),$(1)))) $(firstword $(1))
+# recursive wildcard
+rwildcard = $(foreach d,$(wildcard $(addsuffix /*,$(1))),$(call rwildcard,$(d),$(2))$(filter $(subst *,%,$(2)),$(d)))
 # explode a path into a series of subdirectories
 subby = $(sort $(filter-out .,$(if $(1),$(call subby,$(filter-out $(1),$(patsubst %/,%,$(dir $(1)))))) $(patsubst %/,%,$(1))))
 
@@ -170,7 +173,7 @@ endef
 define begin-project
 $(eval CURRENT_PROJECT_DIR := $(dir $(lastword ${MAKEFILE_LIST})))
 HERE := ${CURRENT_PROJECT_DIR}
-$(info CPD=$(CURRENT_PROJECT_DIR))
+$(info Project dir: $(CURRENT_PROJECT_DIR))
 endef
 
 TARGET_LIST :=
@@ -281,6 +284,9 @@ endef
 # generate rules
 .SECONDEXPANSION :
 $(foreach X,${EXTENSIONS},$(eval $(BUILDDIR)%.o : %.$X | $$$$(@D)/ ; $$(compile.$X)))
+
+# collect all projects
+PROJECTS := $(call rwildcard,$(PROJECT_DIRS),*.prj)
 
 # save any parameters to apply later to all projects
 GLOBAL_CFLAGS := $(CFLAGS)
