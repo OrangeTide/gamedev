@@ -1,15 +1,31 @@
 # Jon's Modular Makefile
 # You are free to modify, rename, steal, or redistribute this file.
-# Version: December 2023
+# Version: February 2024
 ############################################################################
 # Usage:
 # 1. Modify PROJECT_DIRS variable in this file to indicate source directories.
-# 2. Create a .prj file in each source directory describing your project(s).
-# 3. Run `make` (must be GNU make)
+# 2. Create any number of .prj files describing your project(s) under the
+#    source directories.
+# 3. Run `make` from the top level directory (must be GNU make)
 #    a. optionally specify a config: `make CONFIG=configs/yourconfig.mk`
 # 4. Look in bin/ or build/ for your executables and libraries
 # 5. implement your tests in tests/test-somename.sh.
 #    a. run tests with `make test` or `make test-somename`
+############################################################################
+# Supported build types: exe, lib, elf, bin, wasm
+# To get more debugging info, run: make VERBOSE=1
+############################################################################
+# Project Variables
+# Surrounded by $(BEGIN_TARGET) and $(END_TARGET)
+# Multiple targets are possible in a single file.
+#
+# NAME : identifier for target [REQUIRED]
+# TYPE : target build type (exe, lib, ...) [REQUIRED]
+# SRCS : source filenames or wildcards
+# COPYFILES : set with a list of relative paths to be copied into TARGETDIR
+# INCLUDEDIR : relative paths to setup as include directories (-I)
+# USES : list of libraries to link to.
+# CFLAGS, CPPFLAGS, CXXFLAGS, ASFLAGS, ... : flags for build commands
 ############################################################################
 # TODO: support building shared libraries (TYPE=dll)
 #
@@ -28,6 +44,8 @@ AS = ${TOOLCHAIN_PREFIX}as
 AR = ${TOOLCHAIN_PREFIX}ar
 OBJDUMP = ${TOOLCHAIN_PREFIX}objdump
 OBJCOPY = ${TOOLCHAIN_PREFIX}objcopy
+WASM_CC = clang
+WASM_CXX = clang++
 
 ifeq ($(CONFIG),)
 -include config.mk
@@ -96,7 +114,8 @@ EXTENSION.lib = .a
 EXTENSION.bin = .bin
 endif
 
-EXTENSION.header = TBD
+EXTENSION.wasm = .wasm
+# EXTENSION.header = TBD
 
 # enable dependency generation for gcc
 CCOPTS.gcc = -MMD
@@ -112,6 +131,8 @@ EXTENSIONS := c cpp S
 .SUFFIXES: $(addprefix .,$(EXTENSIONS))
 
 BUILDDIR := ${TOP}build/$(TARGET_OS)-$(TARGET_ARCH)/
+TARGETDIR.wasm := ${TOP}webroot/
+# TARGETDIR.wasm := ${TOP}bin/wasm32/
 TARGETDIR.exe := ${TOP}bin/$(TARGET_OS)-$(TARGET_ARCH)/
 TARGETDIR.elf := ${TOP}bin/$(TARGET_OS)-$(TARGET_ARCH)/
 TARGETDIR.dll := ${TOP}bin/$(TARGET_OS)-$(TARGET_ARCH)/
@@ -139,6 +160,7 @@ config.mk :
 	@false
 
 # build actions
+link.wasm = wasm-ld -o $@ --no-entry --strip-all --export-dynamic --allow-undefined --initial-memory=131072 --error-limit=0 --lto-O3 -O3 --gc-sections $(LDFLAGS) $^ $(LDLIBS)
 link.exe = $(if ${CXX_MODE},$(CXX),$(CC)) -o $@ $(LDFLAGS) $^ $(LDLIBS)
 link.elf = $(if ${CXX_MODE},$(CXX),$(CC)) -o $@ $(LDFLAGS) $(if $(LINKERFILE),-T $(LINKERFILE)) $^ $(LDLIBS)
 # TODO: support building Windows dll
@@ -173,7 +195,7 @@ endef
 define begin-project
 $(eval CURRENT_PROJECT_DIR := $(dir $(lastword ${MAKEFILE_LIST})))
 HERE := ${CURRENT_PROJECT_DIR}
-$(info Project dir: $(CURRENT_PROJECT_DIR))
+$(if ${VERBOSE},$(info Project dir: $(CURRENT_PROJECT_DIR)))
 endef
 
 TARGET_LIST :=
@@ -196,8 +218,7 @@ $(eval _CXXFLAGS.${NAME} := ${CXXFLAGS} ${CXXFLAGS.$(TARGET_OS)} ${CXXFLAGS.$(TA
 $(eval _CPPFLAGS.${NAME} := \
 	${CPPFLAGS} ${CPPFLAGS.$(TARGET_OS)} ${CPPFLAGS.$(TARGET_ARCH)} ${CPPFLAGS.$(TARGET_OS).$(TARGET_ARCH)} \
 	$(addprefix -I${CURRENT_PROJECT_DIR}, \
-	${INCLUDEDIR} ${INCLUDEDIR.$(TARGET_OS)} ${INCLUDEDIR.$(TARGET_ARCH)} ${INCLUDEDIR.$(TARGET_OS).$(TARGET_ARCH)}) \
-	-I${CURRENT_PROJECT_DIR})
+	${INCLUDEDIR} ${INCLUDEDIR.$(TARGET_OS)} ${INCLUDEDIR.$(TARGET_ARCH)} ${INCLUDEDIR.$(TARGET_OS).$(TARGET_ARCH)}))
 $(eval _LDFLAGS.${NAME} := ${LDFLAGS} ${LDFLAGS.$(TARGET_OS)} ${LDFLAGS.$(TARGET_ARCH)} ${LDFLAGS.$(TARGET_OS).$(TARGET_ARCH)})
 $(eval _LDLIBS.${NAME} := ${LDLIBS} ${LDLIBS.$(TARGET_OS)} ${LDLIBS.$(TARGET_ARCH)} ${LDLIBS.$(TARGET_OS).$(TARGET_ARCH)})
 _ASFLAGS.${NAME} := ${ASFLAGS} ${ASFLAGS.$(TARGET_OS)} ${ASFLAGS.$(TARGET_ARCH)} ${ASFLAGS.$(TARGET_OS).$(TARGET_ARCH)}
@@ -226,9 +247,9 @@ _PROVIDES_CFLAGS.${NAME} = $(_CFLAGS.${NAME})
 endif
 _PROVIDES_CPPFLAGS.${NAME} := \
 	$(foreach u,${_USES.$(NAME)},$${_PROVIDES_CPPFLAGS.$u}) \
-	$(if ${INCLUDEDIR}${INCLUDEDIR.$(TARGET_OS)}${INCLUDEDIR.$(TARGET_ARCH)}${INCLUDEDIR.$(TARGET_OS).$(TARGET_ARCH)}, \
+	$(if $(or ${INCLUDEDIR},${INCLUDEDIR.$(TARGET_OS)},${INCLUDEDIR.$(TARGET_ARCH)},${INCLUDEDIR.$(TARGET_OS).$(TARGET_ARCH)}), \
 	$(sort -I${CURRENT_PROJECT_DIR} $(addprefix -I${CURRENT_PROJECT_DIR}, \
-	${INCLUDEDIR} ${INCLUDEDIR.$(TARGET_OS)} ${INCLUDEDIR.$(TARGET_ARCH)} ${INCLUDEDIR.$(TARGET_OS).$(TARGET_ARCH)})), \
+	$(strip ${INCLUDEDIR} ${INCLUDEDIR.$(TARGET_OS)} ${INCLUDEDIR.$(TARGET_ARCH)} ${INCLUDEDIR.$(TARGET_OS).$(TARGET_ARCH)}))), \
 	-I${CURRENT_PROJECT_DIR})
 $(eval _SRCS.${NAME} := $(strip $(wildcard $(addprefix ${CURRENT_PROJECT_DIR}, ${SRCS} ${SRCS.$(TARGET_OS)} ${SRCS.$(TARGET_ARCH)} ${SRCS.$(TARGET_OS).$(TARGET_ARCH)}))))
 _EXTRA.${NAME} := ${EXTRA} ${EXTRA.$(TARGET_OS)} ${EXTRA.$(TARGET_ARCH)} ${EXTRA.$(TARGET_OS).$(TARGET_ARCH)}
@@ -243,10 +264,12 @@ endef
 
 define copy-rule
 $(eval ${TARGETDIR.${_TYPE.$1}}$(notdir $2) :: $2 ; $$(copy))
+$(eval all :: ${TARGETDIR.${_TYPE.$1}}$(notdir $2))
+$(if ${VERBOSE},$(info Copy files: $2 -> ${TARGETDIR.${_TYPE.$1}}))
 endef
 
 define add-target
-$(info Found ${_EXEC_BASE.$1} ... TYPE=${_TYPE.$1} $(if ${_USES.$1},USES=${_USES.$1}))
+$(if ${VERBOSE},$$(info Found ${_EXEC_BASE.$1} ... TYPE=${_TYPE.$1} $(if ${_USES.$1},USES=${_USES.$1})))
 ifneq (${_TYPE.$1},header)
 all :: ${_EXEC.$1}
 test-$1 : ${_EXEC.$1}
@@ -255,7 +278,9 @@ ${_EXEC.$1} : ${_REAL_OBJS.$1} $(foreach u,${_USES.$1},${_EXEC.$u}) | $(dir ${_E
 	$(foreach u,${_USES.$1},$(addprefix ${TARGETDIR.${_TYPE.$1}},$(notdir ${_COPYFILES.$u})))
 	$$(link.${_TYPE.$1})
 ${_EXEC.$1} : CXX_MODE := $(if $(foreach u,${_USES.$1},${_SRCS_cpp.$u}),1,)
-${_EXEC.$1} : CFLAGS = ${_CFLAGS.$1} $(foreach u,${_USES.$1},${_PROVIDES_CFLAGS.$u})
+${_EXEC.$1} : CC := $(if $(findstring wasm,${_TYPE.$1}),$(WASM_CC),$(CC))
+${_EXEC.$1} : CXX := $(if $(findstring wasm,${_TYPE.$1}),$(WASM_CXX),$(CXX))
+${_EXEC.$1} : CFLAGS = $(if $(findstring wasm,${_TYPE.$1}),--target=wasm32 -nostdlib -fvisibility=hidden -ffunction-sections -fdata-sections) ${_CFLAGS.$1} $(foreach u,${_USES.$1},${_PROVIDES_CFLAGS.$u})
 ${_EXEC.$1} : CXXFLAGS = ${_CXXFLAGS.$1} $(foreach u,${_USES.$1},${_PROVIDES_CXXFLAGS.$u})
 ${_EXEC.$1} : CPPFLAGS = ${_CPPFLAGS.$1} -I${_BASEDIR.$1} $(foreach u,${_USES.$1},${_PROVIDES_CPPFLAGS.$u})
 ${_EXEC.$1} : LDFLAGS = ${_LDFLAGS.$1} $(foreach u,${_USES.$1},${_PROVIDES_LDFLAGS.$u})
@@ -264,6 +289,7 @@ ${_EXEC.$1} : ASFLAGS = ${_ASFLAGS.$1}
 ${_EXEC.$1} : LINKERFILE = ${_LINKERFILE.$1}
 ${_REAL_OBJS.$1} : | $(addprefix ${_BASEDIR.$1},${_EXTRA.$1})
 $$(foreach u,${_USES.$1},$$(foreach f,$${_COPYFILES.$$u},$$(call copy-rule,$1,$$f )))
+$$(foreach f,$${_COPYFILES.$1},$$(call copy-rule,$1,$$f ))
 clean-bins :: ; $$(RM) ${_EXEC.$1} $(foreach u,${_USES.$1},$(addprefix ${TARGETDIR.${_TYPE.$1}},$(notdir ${_COPYFILES.$u})))
 ifneq (${_REAL_OBJS.$1},)
 clean :: ; $$(RM) ${_REAL_OBJS.$1}
@@ -296,8 +322,8 @@ GLOBAL_LDFLAGS := $(LDFLAGS)
 GLOBAL_LDLIBS := $(LDLIBS)
 GLOBAL_ASFLAGS := $(ASFLAGS)
 
-$(info BUILDDIR=${BUILDDIR})
-$(info OS=${OS} ARCH=${ARCH})
+$(if ${VERBOSE},$(info BUILDDIR=${BUILDDIR}))
+$(if ${VERBOSE},$(info OS=${OS} ARCH=${ARCH}))
 
 # Each project file must wrap beginning and end of project sections with these
 BEGIN_TARGET = $(eval $(call clear-vars) $(call begin-project))
